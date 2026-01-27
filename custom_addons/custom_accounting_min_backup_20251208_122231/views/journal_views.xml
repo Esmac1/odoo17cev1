@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_journal_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.journal.tree</field>
+        <field name="model">custom_accounting.journal</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="type"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_journal_form" model="ir.ui.view">
+        <field name="name">custom_accounting.journal.form</field>
+        <field name="model">custom_accounting.journal</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="type"/>
+                    </group>
+                    <group>
+                        <field name="default_account_id"/>
+                        <field name="sequence_id"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_custom_journal" model="ir.actions.act_window">
+        <field name="name">Journals</field>
+        <field name="res_model">custom_accounting.journal</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

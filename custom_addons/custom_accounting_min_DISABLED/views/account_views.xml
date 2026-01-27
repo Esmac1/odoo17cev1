@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Account Form View -->
+    <record id="view_account_form" model="ir.ui.view">
+        <field name="name">custom_accounting.account.form</field>
+        <field name="model">custom_accounting.account</field>
+        <field name="arch" type="xml">
+            <form string="Account">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="type"/>
+                            <field name="parent_id"/>
+                            <field name="currency_id"/>
+                        </group>
+                        <group>
+                            <field name="balance"/>
+                            <field name="foreign_balance"/>
+                            <field name="reconcile"/>
+                            <field name="active"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Account Tree View -->
+    <record id="view_account_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.account.tree</field>
+        <field name="model">custom_accounting.account</field>
+        <field name="arch" type="xml">
+            <tree string="Accounts">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="type"/>
+                <field name="balance"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Account Action -->
+    <record id="action_custom_account" model="ir.actions.act_window">
+        <field name="name">Chart of Accounts</field>
+        <field name="res_model">custom_accounting.account</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

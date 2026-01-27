@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Payslip Tree View -->
+    <record id="view_payslip_tree" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip.tree</field>
+        <field name="model">custom_payroll.payslip</field>
+        <field name="arch" type="xml">
+            <tree string="Payslips">
+                <field name="name"/>
+                <field name="employee_id"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="gross_salary"/>
+                <field name="net_salary"/>
+                <field name="state" widget="badge" decoration-success="state=='paid'" decoration-warning="state=='confirmed'" decoration-danger="state=='cancelled'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Payslip Form View -->
+    <record id="view_payslip_form" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip.form</field>
+        <field name="model">custom_payroll.payslip</field>
+        <field name="arch" type="xml">
+            <form string="Payslip">
+                <header>
+                    <button name="action_verify" string="Verify" type="object" class="btn-primary" states="draft"/>
+                    <button name="action_confirm" string="Confirm" type="object" states="verified"/>
+                    <button name="action_pay" string="Mark as Paid" type="object" states="confirmed"/>
+                    <button name="action_cancel" string="Cancel" type="object" states="draft,verified"/>
+                    <button name="action_compute_sheet" string="Compute" type="object" class="oe_highlight" states="draft"/>
+                    <button name="action_print_payslip" string="Print" type="object" class="btn-secondary"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,verified,confirmed,paid"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Payslip Number"/>
+                        </h1>
+                        <h2>
+                            <field name="employee_id" widget="many2one" options="{'no_create': True}"/>
+                        </h2>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="date_payment"/>
+                            <field name="state"/>
+                        </group>
+                        <group>
+                            <field name="contract_id"/>
+                            <field name="salary_structure_id" readonly="1"/>
+                            <field name="payslip_run_id"/>
+                        </group>
+                    </group>
+                    <group string="Salary Summary">
+                        <field name="basic_salary" readonly="1"/>
+                        <field name="total_allowances" readonly="1"/>
+                        <field name="gross_salary" readonly="1"/>
+                        <field name="total_deductions" readonly="1"/>
+                        <field name="net_salary" readonly="1"/>
+                    </group>
+                    <group string="Statutory Deductions">
+                        <field name="paye_tax" readonly="1"/>
+                        <field name="nssf_deduction" readonly="1"/>
+                        <field name="nhif_deduction" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Payslip Lines">
+                            <field name="line_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="code"/>
+                                    <field name="category"/>
+                                    <field name="amount"/>
+                                    <field name="quantity"/>
+                                    <field name="rate"/>
+                                    <field name="total"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Worked Days">
+                            <field name="worked_days_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="code"/>
+                                    <field name="number_of_days"/>
+                                    <field name="number_of_hours"/>
+                                    <field name="amount"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Leave Days">
+                            <field name="leave_days_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="code"/>
+                                    <field name="number_of_days"/>
+                                    <field name="paid"/>
+                                    <field name="amount"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="notes" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Payslip Search View -->
+    <record id="view_payslip_search" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip.search</field>
+        <field name="model">custom_payroll.payslip</field>
+        <field name="arch" type="xml">
+            <search string="Search Payslips">
+                <field name="employee_id"/>
+                <field name="name"/>
+                <field name="state"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <filter string="This Month" name="this_month" domain="[('date_from','&gt;=',context_today().strftime('%Y-%m-01'))]"/>
+                <filter string="Unpaid" name="unpaid" domain="[('state','=','confirmed')]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Employee" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="Month" name="group_month" context="{'group_by': 'date_from:month'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Payslip Action -->
+    <record id="action_payslip" model="ir.actions.act_window">
+        <field name="name">Payslips</field>
+        <field name="res_model">custom_payroll.payslip</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_payslip_search"/>
+        <field name="context">{'default_state': 'draft'}</field>
+    </record>
+
+    <!-- Payslip Menu -->
+    <menuitem id="menu_payslip" name="Payslips" parent="menu_payroll_root" action="action_payslip" sequence="40"/>
+</odoo>

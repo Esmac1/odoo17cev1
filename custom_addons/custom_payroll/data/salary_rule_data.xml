@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Salary Rule Categories -->
+    <record id="category_allowances" model="custom_payroll.salary_rule_category">
+        <field name="name">Allowances</field>
+        <field name="code">ALLOW</field>
+    </record>
+    
+    <record id="category_deductions" model="custom_payroll.salary_rule_category">
+        <field name="name">Deductions</field>
+        <field name="code">DEDUCT</field>
+    </record>
+    
+    <record id="category_totals" model="custom_payroll.salary_rule_category">
+        <field name="name">Totals</field>
+        <field name="code">TOTAL</field>
+    </record>
+    
+    <!-- Basic Salary Rule -->
+    <record id="rule_basic" model="custom_payroll.salary_rule">
+        <field name="name">Basic Salary</field>
+        <field name="code">BASIC</field>
+        <field name="category_id" ref="category_allowances"/>
+        <field name="rule_type">allowance</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">10</field>
+    </record>
+    
+    <!-- Housing Allowance -->
+    <record id="rule_housing" model="custom_payroll.salary_rule">
+        <field name="name">Housing Allowance</field>
+        <field name="code">HOUSE</field>
+        <field name="category_id" ref="category_allowances"/>
+        <field name="rule_type">allowance</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">20</field>
+    </record>
+    
+    <!-- Transport Allowance -->
+    <record id="rule_transport" model="custom_payroll.salary_rule">
+        <field name="name">Transport Allowance</field>
+        <field name="code">TRANS</field>
+        <field name="category_id" ref="category_allowances"/>
+        <field name="rule_type">allowance</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">30</field>
+    </record>
+    
+    <!-- Medical Allowance -->
+    <record id="rule_medical" model="custom_payroll.salary_rule">
+        <field name="name">Medical Allowance</field>
+        <field name="code">MEDICAL</field>
+        <field name="category_id" ref="category_allowances"/>
+        <field name="rule_type">allowance</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">40</field>
+    </record>
+    
+    <!-- PAYE Tax -->
+    <record id="rule_paye" model="custom_payroll.salary_rule">
+        <field name="name">PAYE Tax</field>
+        <field name="code">PAYE</field>
+        <field name="category_id" ref="category_deductions"/>
+        <field name="rule_type">deduction</field>
+        <field name="amount_type">percentage_gross</field>
+        <field name="amount">7</field>
+        <field name="sequence">10</field>
+    </record>
+    
+    <!-- NSSF Contribution -->
+    <record id="rule_nssf" model="custom_payroll.salary_rule">
+        <field name="name">NSSF Contribution</field>
+        <field name="code">NSSF</field>
+        <field name="category_id" ref="category_deductions"/>
+        <field name="rule_type">deduction</field>
+        <field name="amount_type">percentage</field>
+        <field name="amount">5</field>
+        <field name="sequence">20</field>
+    </record>
+    
+    <!-- NHIF Contribution -->
+    <record id="rule_nhif" model="custom_payroll.salary_rule">
+        <field name="name">NHIF Contribution</field>
+        <field name="code">NHIF</field>
+        <field name="category_id" ref="category_deductions"/>
+        <field name="rule_type">deduction</field>
+        <field name="amount_type">fixed</field>
+        <field name="amount">1500</field>
+        <field name="sequence">30</field>
+    </record>
+    
+    <!-- Gross Salary Total -->
+    <record id="rule_gross" model="custom_payroll.salary_rule">
+        <field name="name">Gross Salary</field>
+        <field name="code">GROSS</field>
+        <field name="category_id" ref="category_totals"/>
+        <field name="rule_type">total</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">10</field>
+    </record>
+    
+    <!-- Total Deductions -->
+    <record id="rule_deductions_total" model="custom_payroll.salary_rule">
+        <field name="name">Total Deductions</field>
+        <field name="code">DEDUCT_TOTAL</field>
+        <field name="category_id" ref="category_totals"/>
+        <field name="rule_type">total</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">20</field>
+    </record>
+    
+    <!-- Net Salary -->
+    <record id="rule_net" model="custom_payroll.salary_rule">
+        <field name="name">Net Salary</field>
+        <field name="code">NET</field>
+        <field name="category_id" ref="category_totals"/>
+        <field name="rule_type">total</field>
+        <field name="amount_type">fixed</field>
+        <field name="sequence">30</field>
+    </record>
+    
+    <!-- Default Salary Structure -->
+    <record id="structure_default" model="custom_payroll.salary_structure">
+        <field name="name">Default Salary Structure</field>
+        <field name="code">DEFAULT</field>
+        <field name="default_basic">100000</field>
+        <field name="default_housing">50000</field>
+        <field name="default_transport">20000</field>
+        <field name="default_medical">10000</field>
+        <field eval="[(6, 0, [ref('rule_basic'), ref('rule_housing'), ref('rule_transport'), ref('rule_medical'), ref('rule_paye'), ref('rule_nssf'), ref('rule_nhif'), ref('rule_gross'), ref('rule_deductions_total'), ref('rule_net')])]" name="rule_ids"/>
+    </record>
+</odoo>

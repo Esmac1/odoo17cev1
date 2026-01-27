@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+    <t t-name="popup_notifications.NotificationRoot">
+        <!-- This component runs in background and doesn't render anything visible -->
+    </t>
+</templates>

@@ -1,0 +1,28 @@
+/* Custom styling for Discuss notifications */
+.discuss-notification-popup {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-left: 4px solid #00A09D !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.discuss-notification-popup .o_notification_title {
+    color: white !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+}
+
+.discuss-notification-popup .o_notification_content {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+}
+
+@keyframes slideInNotification {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.o_notification_manager .o_notification {
+    animation: slideInNotification 0.3s ease-out;
+}

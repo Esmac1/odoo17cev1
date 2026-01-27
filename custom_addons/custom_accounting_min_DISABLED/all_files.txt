@@ -1,0 +1,2823 @@
+========== ./data/sequences.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Sequence -->
+    <record id="seq_custom_accounting_asset" model="ir.sequence">
+        <field name="name">Asset Code</field>
+        <field name="code">custom_accounting.asset</field>
+        <field name="prefix">AST/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Reconciliation Sequence -->
+    <record id="seq_custom_accounting_reconciliation" model="ir.sequence">
+        <field name="name">Reconciliation Reference</field>
+        <field name="code">custom_accounting.reconciliation</field>
+        <field name="prefix">REC/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>
+
+
+
+========== ./__init__.py ==========
+# This file only imports the models package
+from . import models
+from . import reports
+from . import wizards
+
+
+
+========== ./__manifest__.py ==========
+{
+    'name': 'Custom Accounting Extended Pro',
+    'version': '1.0',
+    'summary': 'Complete accounting system with advanced features',
+    'description': """
+        Advanced accounting system with:
+        - Chart of Accounts
+        - Journals and Transactions
+        - Invoicing (Customer/Vendor)
+        - Payments
+        - Budget Management
+        - Tax Management
+        - Recurring Entries
+        - Assets Management
+        - Bank Reconciliation
+        - Trial Balance Reports
+    """,
+    'author': 'Your Name',
+    'website': 'https://yourwebsite.com',
+    'category': 'Accounting',
+    'depends': ['base', 'mail'],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/account_views.xml',
+        'views/journal_views.xml',
+        'views/move_views.xml',
+        'views/tax_views.xml',
+        'views/budget_views.xml',
+        'views/payment_views.xml',
+        'views/dashboard_views.xml',
+        'views/invoice_views.xml',
+        'views/asset_views.xml',
+        'views/asset_category_views.xml',
+        'views/asset_depreciation_views.xml',
+        'views/recurring_transaction_views.xml',
+        'views/reconciliation_views.xml',
+        'views/trial_balance_views.xml',
+        'views/menu.xml',
+    ],
+    'demo': [],
+    'installable': True,
+    'application': True,
+    'auto_install': False,
+}
+
+
+
+========== ./models/account.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CustomAccount(models.Model):
+    _name = 'custom_accounting.account'
+    _description = 'Chart of Accounts'
+    _order = 'code'
+    _rec_name = 'complete_name'
+
+    name = fields.Char(string='Account Name', required=True)
+    code = fields.Char(string='Account Code', required=True)
+    complete_name = fields.Char(string='Complete Name', compute='_compute_complete_name', store=True)
+    account_type = fields.Selection([
+        ('asset', 'Asset'),
+        ('liability', 'Liability'),
+        ('equity', 'Equity'),
+        ('income', 'Income'),
+        ('expense', 'Expense'),
+    ], string='Type', required=True)
+
+    parent_id = fields.Many2one('custom_accounting.account', string='Parent Account')
+    child_ids = fields.One2many('custom_accounting.account', 'parent_id', string='Child Accounts')
+    currency_id = fields.Many2one('res.currency', string='Currency', default=lambda self: self.env.company.currency_id)
+
+    balance = fields.Float(string='Balance', compute='_compute_balance', store=True)
+    debit = fields.Float(string='Total Debit', compute='_compute_balance', store=True)
+    credit = fields.Float(string='Total Credit', compute='_compute_balance', store=True)
+
+    reconcile = fields.Boolean(string='Allow Reconciliation', default=False)
+    active = fields.Boolean(default=True)
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
+
+    @api.depends('name', 'code', 'parent_id.complete_name')
+    def _compute_complete_name(self):
+        for account in self:
+            if account.parent_id:
+                account.complete_name = f"{account.parent_id.complete_name} / {account.code} - {account.name}"
+            else:
+                account.complete_name = f"{account.code} - {account.name}"
+
+    @api.depends('child_ids.balance')
+    def _compute_balance(self):
+        for account in self:
+            if account.child_ids:
+                account.debit = sum(account.child_ids.mapped('debit'))
+                account.credit = sum(account.child_ids.mapped('credit'))
+                account.balance = sum(account.child_ids.mapped('balance'))
+            else:
+                # Use safe search to avoid circular import
+                move_line_model = self.env['custom_accounting.move.line']
+                lines = move_line_model.search([
+                    ('account_id', '=', account.id),
+                    ('move_id.state', '=', 'posted')
+                ])
+                account.debit = sum(lines.mapped('debit'))
+                account.credit = sum(lines.mapped('credit'))
+                account.balance = account.debit - account.credit
+
+    _sql_constraints = [
+        ('code_company_uniq', 'unique (code, company_id)', 'The code of the account must be unique per company!')
+    ]
+
+
+
+========== ./models/asset.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError, ValidationError
+from datetime import date, datetime
+
+class Asset(models.Model):
+    _name = 'custom_accounting.asset'
+    _description = 'Fixed Asset'
+    _order = 'code, name'
+    
+    # Basic Information
+    name = fields.Char(string='Asset Name', required=True)
+    code = fields.Char(string='Asset Code', required=True, default=lambda self: self.env['ir.sequence'].next_by_code('custom_accounting.asset'))
+    category_id = fields.Many2one('custom_accounting.asset.category', string='Asset Category', required=True)
+    
+    # Acquisition
+    purchase_date = fields.Date(string='Purchase Date', required=True, default=fields.Date.today)
+    purchase_value = fields.Float(string='Purchase Value', required=True, digits=(16, 2))
+    salvage_value = fields.Float(string='Salvage Value', digits=(16, 2), default=0.0)
+    useful_life = fields.Integer(string='Useful Life (Months)', required=True, default=60)
+    
+    # Depreciation
+    depreciation_method = fields.Selection([
+        ('straight_line', 'Straight Line'),
+        ('declining_balance', 'Declining Balance'),
+        ('double_declining', 'Double Declining Balance')
+    ], string='Depreciation Method', required=True, default='straight_line')
+    
+    depreciation_rate = fields.Float(string='Depreciation Rate (%)', compute='_compute_depreciation_rate')
+    accumulated_depreciation = fields.Float(string='Accumulated Depreciation', compute='_compute_accumulated_depreciation', store=True)
+    current_value = fields.Float(string='Current Value', compute='_compute_current_value', store=True)
+    
+    # Accounting
+    asset_account_id = fields.Many2one('custom_accounting.account', string='Asset Account', required=True)
+    depreciation_account_id = fields.Many2one('custom_accounting.account', string='Depreciation Account', required=True)
+    expense_account_id = fields.Many2one('custom_accounting.account', string='Expense Account', required=True)
+    
+    # Status
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('running', 'Running'),
+        ('closed', 'Closed'),
+        ('sold', 'Sold'),
+        ('scrapped', 'Scrapped')
+    ], string='Status', default='draft', required=True)
+    
+    # Depreciation Lines
+    depreciation_line_ids = fields.One2many('custom_accounting.asset.depreciation.line', 'asset_id', string='Depreciation Lines')
+    
+    # Computed fields
+    @api.depends('depreciation_method', 'useful_life')
+    def _compute_depreciation_rate(self):
+        for asset in self:
+            if asset.useful_life > 0:
+                if asset.depreciation_method == 'straight_line':
+                    asset.depreciation_rate = 100.0 / asset.useful_life
+                elif asset.depreciation_method == 'declining_balance':
+                    asset.depreciation_rate = 200.0 / asset.useful_life
+                elif asset.depreciation_method == 'double_declining':
+                    asset.depreciation_rate = 400.0 / asset.useful_life
+            else:
+                asset.depreciation_rate = 0.0
+    
+    @api.depends('depreciation_line_ids', 'depreciation_line_ids.amount')
+    def _compute_accumulated_depreciation(self):
+        for asset in self:
+            asset.accumulated_depreciation = sum(line.amount for line in asset.depreciation_line_ids.filtered(lambda l: l.state == 'posted'))
+    
+    @api.depends('purchase_value', 'accumulated_depreciation')
+    def _compute_current_value(self):
+        for asset in self:
+            asset.current_value = asset.purchase_value - asset.accumulated_depreciation
+    
+    # Actions
+    def action_confirm(self):
+        if self.state != 'draft':
+            raise UserError(_('Only draft assets can be confirmed.'))
+        
+        # Create first depreciation line
+        self.env['custom_accounting.asset.depreciation.line'].create({
+            'asset_id': self.id,
+            'name': 'Initial Depreciation',
+            'date': self.purchase_date,
+            'amount': 0.0,  # First month might be partial
+            'state': 'draft'
+        })
+        
+        self.write({'state': 'running'})
+    
+    def action_compute_depreciation(self):
+        self.ensure_one()
+        
+        if self.state != 'running':
+            raise UserError(_('Only running assets can compute depreciation.'))
+        
+        # Calculate monthly depreciation
+        depreciable_value = self.purchase_value - self.salvage_value
+        
+        if self.depreciation_method == 'straight_line':
+            monthly_depreciation = depreciable_value / self.useful_life
+        else:
+            # Simplified calculation for declining balance methods
+            monthly_rate = self.depreciation_rate / 12 / 100
+            monthly_depreciation = self.current_value * monthly_rate
+        
+        # Create depreciation line for current month
+        today = fields.Date.today()
+        self.env['custom_accounting.asset.depreciation.line'].create({
+            'asset_id': self.id,
+            'name': 'Depreciation for %s' % today.strftime('%B %Y'),
+            'date': today,
+            'amount': monthly_depreciation,
+            'state': 'draft'
+        })
+    
+    def action_post_depreciation(self):
+        self.ensure_one()
+        
+        # Post all draft depreciation lines
+        draft_lines = self.depreciation_line_ids.filtered(lambda l: l.state == 'draft')
+        
+        for line in draft_lines:
+            # Create journal entry for depreciation
+            journal = self.env['custom_accounting.journal'].search([('type', '=', 'general')], limit=1)
+            
+            if not journal:
+                raise UserError(_('No general journal found. Please create one first.'))
+            
+            # Create depreciation journal entry
+            move = self.env['custom_accounting.move'].create({
+                'name': 'Depreciation: %s' % self.name,
+                'date': line.date,
+                'journal_id': journal.id,
+                'line_ids': [
+                    (0, 0, {
+                        'account_id': self.expense_account_id.id,
+                        'name': 'Depreciation Expense: %s' % self.name,
+                        'debit': line.amount,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'account_id': self.depreciation_account_id.id,
+                        'name': 'Accumulated Depreciation: %s' % self.name,
+                        'debit': 0.0,
+                        'credit': line.amount,
+                    })
+                ]
+            })
+            move.action_post()
+            
+            line.write({
+                'state': 'posted',
+                'move_id': move.id
+            })
+    
+    # Constraints
+    @api.constrains('purchase_value')
+    def _check_purchase_value(self):
+        for asset in self:
+            if asset.purchase_value <= 0:
+                raise ValidationError(_('Purchase value must be greater than zero.'))
+    
+    @api.constrains('useful_life')
+    def _check_useful_life(self):
+        for asset in self:
+            if asset.useful_life <= 0:
+                raise ValidationError(_('Useful life must be greater than zero.'))
+
+class AssetCategory(models.Model):
+    _name = 'custom_accounting.asset.category'
+    _description = 'Asset Category'
+    
+    name = fields.Char(string='Name', required=True)
+    code = fields.Char(string='Code', required=True)
+    description = fields.Text(string='Description')
+    
+    # Default accounts
+    default_asset_account_id = fields.Many2one('custom_accounting.account', string='Default Asset Account')
+    default_depreciation_account_id = fields.Many2one('custom_accounting.account', string='Default Depreciation Account')
+    default_expense_account_id = fields.Many2one('custom_accounting.account', string='Default Expense Account')
+    
+    _sql_constraints = [
+        ('code_unique', 'UNIQUE(code)', 'Asset category code must be unique!'),
+    ]
+
+class AssetDepreciationLine(models.Model):
+    _name = 'custom_accounting.asset.depreciation.line'
+    _description = 'Asset Depreciation Line'
+    _order = 'date desc'
+    
+    asset_id = fields.Many2one('custom_accounting.asset', string='Asset', required=True, ondelete='cascade')
+    name = fields.Char(string='Description', required=True)
+    date = fields.Date(string='Date', required=True, default=fields.Date.today)
+    amount = fields.Float(string='Amount', digits=(16, 2), required=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted')
+    ], string='Status', default='draft', required=True)
+    
+    # Link to journal entry
+    move_id = fields.Many2one('custom_accounting.move', string='Journal Entry')
+    
+    def action_post(self):
+        self.ensure_one()
+        if self.state == 'draft':
+            self.asset_id.action_post_depreciation()
+
+
+
+========== ./models/bank_transaction.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+from odoo.exceptions import UserError
+
+class BankTransaction(models.Model):
+    _name = 'custom_accounting.bank_transaction'
+    _description = 'Bank Transaction'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+
+    name = fields.Char(string="Reference", required=True, default="New")
+    date = fields.Date(default=fields.Date.today, required=True)
+    partner_id = fields.Many2one('res.partner', string="Partner")
+    amount = fields.Float(required=True)
+    type = fields.Selection([
+        ('deposit', 'Deposit / Receipt'),
+        ('withdrawal', 'Withdrawal / Payment')
+    ], required=True, default='deposit')
+
+    account_id = fields.Many2one('custom_accounting.account', string='Bank Account', required=True,
+                                 domain="[('account_type', 'in', ['asset']), ('reconcile', '=', True)]")
+    journal_id = fields.Many2one('custom_accounting.journal', string='Journal', required=True)
+    move_id = fields.Many2one('custom_accounting.move', string='Journal Entry', readonly=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('cancelled', 'Cancelled')
+    ], default='draft', tracking=True)
+
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+
+    @api.model
+    def create(self, vals):
+        if vals.get('name', 'New') == 'New':
+            vals['name'] = self.env['ir.sequence'].next_by_code('custom_accounting.bank_transaction') or 'New'
+        return super().create(vals)
+
+    def action_post(self):
+        for rec in self:
+            if rec.state != 'draft':
+                continue
+
+            # Determine debit/credit accounts
+            if rec.type == 'deposit':
+                debit_account = rec.account_id
+                credit_account = rec.partner_id.property_account_receivable_id or self.env['custom_accounting.account'].search([('code', '=', '400001')], limit=1)  # fallback income
+            else:
+                debit_account = rec.partner_id.property_account_payable_id or self.env['custom_accounting.account'].search([('code', '=', '500001')], limit=1)
+                credit_account = rec.account_id
+
+            move_vals = {
+                'date': rec.date,
+                'journal_id': rec.journal_id.id,
+                'ref': rec.name,
+                'line_ids': [
+                    (0, 0, {
+                        'name': rec.name + " - Bank",
+                        'account_id': rec.account_id.id,
+                        'debit': rec.amount if rec.type == 'deposit' else 0,
+                        'credit': rec.amount if rec.type == 'withdrawal' else 0,
+                        'partner_id': rec.partner_id.id,
+                    }),
+                    (0, 0, {
+                        'name': rec.name + " - Counterparty",
+                        'account_id': credit_account.id if rec.type == 'deposit' else debit_account.id,
+                        'debit': rec.amount if rec.type == 'withdrawal' else 0,
+                        'credit': rec.amount if rec.type == 'deposit' else 0,
+                        'partner_id': rec.partner_id.id,
+                    }),
+                ]
+            }
+
+            move = self.env['custom_accounting.move'].create(move_vals)
+            move.action_post()
+            rec.write({'move_id': move.id, 'state': 'posted'})
+
+    def action_cancel(self):
+        for rec in self:
+            if rec.move_id:
+                rec.move_id.button_cancel()
+                rec.move_id.unlink()
+            rec.state = 'cancelled'
+
+    def action_reset_draft(self):
+        self.write({'state': 'draft', 'move_id': False})
+
+
+
+========== ./models/budget.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError, UserError
+from datetime import datetime
+
+class CustomBudget(models.Model):
+    _name = 'custom_accounting.budget'
+    _description = 'Budget Management System'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    
+    name = fields.Char(string='Budget Name', required=True)
+    code = fields.Char(string='Budget Code', required=True, size=20)
+    fiscal_year = fields.Char(string='Fiscal Year', required=True, 
+                             default=lambda self: str(datetime.now().year))
+    
+    date_from = fields.Date(string='From Date', required=True, 
+                           default=lambda self: datetime.now().replace(month=1, day=1).date())
+    date_to = fields.Date(string='To Date', required=True, 
+                         default=lambda self: datetime.now().replace(month=12, day=31).date())
+    
+    # Budget Scope
+    department_id = fields.Many2one('hr.department', string='Department')
+    project_id = fields.Many2one('project.project', string='Project')
+    cost_center_id = fields.Many2one('custom_accounting.cost.center', string='Cost Center')
+    
+    # Budget Lines
+    budget_line_ids = fields.One2many('custom_accounting.budget.line', 'budget_id', 
+                                      string='Budget Lines')
+    
+    # State
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted for Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('closed', 'Closed'),
+    ], string='Status', default='draft', tracking=True)
+    
+    # Totals
+    total_budget = fields.Float(string='Total Budget', compute='_compute_totals', 
+                               store=True, digits=(16, 2))
+    total_actual = fields.Float(string='Total Actual', compute='_compute_totals', 
+                               store=True, digits=(16, 2))
+    total_variance = fields.Float(string='Total Variance', compute='_compute_totals', 
+                                 store=True, digits=(16, 2))
+    variance_percentage = fields.Float(string='Variance %', compute='_compute_totals', 
+                                      store=True, digits=(16, 2))
+    
+    # Approval
+    approved_by = fields.Many2one('res.users', string='Approved By', readonly=True)
+    approved_date = fields.Datetime(string='Approved Date', readonly=True)
+    submitted_by = fields.Many2one('res.users', string='Submitted By', readonly=True)
+    submitted_date = fields.Datetime(string='Submitted Date', readonly=True)
+    
+    # Company
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company, required=True)
+    
+    # Description
+    description = fields.Text(string='Description')
+    notes = fields.Text(string='Internal Notes')
+    
+    _sql_constraints = [
+        ('code_company_uniq', 'unique(code, company_id, fiscal_year)', 
+         'Budget code must be unique per company and fiscal year!'),
+    ]
+    
+    @api.depends('budget_line_ids.budget_amount', 'budget_line_ids.actual_amount')
+    def _compute_totals(self):
+        for budget in self:
+            budget.total_budget = sum(budget.budget_line_ids.mapped('budget_amount'))
+            budget.total_actual = sum(budget.budget_line_ids.mapped('actual_amount'))
+            budget.total_variance = budget.total_budget - budget.total_actual
+            
+            if budget.total_budget != 0:
+                budget.variance_percentage = (budget.total_variance / budget.total_budget) * 100
+            else:
+                budget.variance_percentage = 0
+    
+    def action_submit(self):
+        """Submit budget for approval"""
+        for budget in self:
+            if budget.state != 'draft':
+                raise UserError(_("Only draft budgets can be submitted!"))
+            
+            if not budget.budget_line_ids:
+                raise UserError(_("Please add budget lines before submitting!"))
+            
+            budget.state = 'submitted'
+            budget.submitted_by = self.env.user
+            budget.submitted_date = fields.Datetime.now()
+    
+    def action_approve(self):
+        """Approve budget"""
+        for budget in self:
+            if budget.state != 'submitted':
+                raise UserError(_("Only submitted budgets can be approved!"))
+            
+            budget.state = 'approved'
+            budget.approved_by = self.env.user
+            budget.approved_date = fields.Datetime.now()
+    
+    def action_reject(self):
+        """Reject budget"""
+        for budget in self:
+            if budget.state != 'submitted':
+                raise UserError(_("Only submitted budgets can be rejected!"))
+            
+            budget.state = 'rejected'
+    
+    def action_close(self):
+        """Close budget"""
+        for budget in self:
+            if budget.state != 'approved':
+                raise UserError(_("Only approved budgets can be closed!"))
+            
+            budget.state = 'closed'
+    
+    def action_reopen(self):
+        """Reopen budget"""
+        for budget in self:
+            if budget.state not in ('rejected', 'closed'):
+                raise UserError(_("Only rejected or closed budgets can be reopened!"))
+            
+            budget.state = 'draft'
+    
+    def get_budget_performance(self):
+        """Get budget performance analysis"""
+        performance = {
+            'total_budget': self.total_budget,
+            'total_actual': self.total_actual,
+            'total_variance': self.total_variance,
+            'variance_percentage': self.variance_percentage,
+            'lines': [],
+        }
+        
+        for line in self.budget_line_ids:
+            performance['lines'].append({
+                'account': line.account_id.complete_name,
+                'budget_amount': line.budget_amount,
+                'actual_amount': line.actual_amount,
+                'variance': line.variance,
+                'variance_percentage': line.variance_percentage,
+                'status': line.status,
+            })
+        
+        return performance
+
+class BudgetLine(models.Model):
+    _name = 'custom_accounting.budget.line'
+    _description = 'Budget Line'
+    _order = 'account_id'
+    
+    budget_id = fields.Many2one('custom_accounting.budget', string='Budget', 
+                               required=True, ondelete='cascade')
+    account_id = fields.Many2one('custom_accounting.account', string='Account', 
+                                required=True)
+    account_type = fields.Selection(related='account_id.account_type', 
+                                   string='Account Type', readonly=True)
+    
+    # Budget Amounts
+    budget_amount = fields.Float(string='Budget Amount', required=True, digits=(16, 2))
+    
+    # Actual Amounts (computed)
+    actual_amount = fields.Float(string='Actual Amount', compute='_compute_actual', 
+                                store=True, digits=(16, 2))
+    
+    # Variance
+    variance = fields.Float(string='Variance', compute='_compute_variance', 
+                           store=True, digits=(16, 2))
+    variance_percentage = fields.Float(string='Variance %', compute='_compute_variance', 
+                                      store=True, digits=(16, 2))
+    
+    # Status
+    status = fields.Selection([
+        ('on_budget', 'On Budget'),
+        ('under_budget', 'Under Budget'),
+        ('over_budget', 'Over Budget'),
+        ('no_activity', 'No Activity'),
+    ], string='Status', compute='_compute_status', store=True)
+    
+    # Monthly Breakdown
+    jan_amount = fields.Float(string='January', digits=(16, 2))
+    feb_amount = fields.Float(string='February', digits=(16, 2))
+    mar_amount = fields.Float(string='March', digits=(16, 2))
+    apr_amount = fields.Float(string='April', digits=(16, 2))
+    may_amount = fields.Float(string='May', digits=(16, 2))
+    jun_amount = fields.Float(string='June', digits=(16, 2))
+    jul_amount = fields.Float(string='July', digits=(16, 2))
+    aug_amount = fields.Float(string='August', digits=(16, 2))
+    sep_amount = fields.Float(string='September', digits=(16, 2))
+    oct_amount = fields.Float(string='October', digits=(16, 2))
+    nov_amount = fields.Float(string='November', digits=(16, 2))
+    dec_amount = fields.Float(string='December', digits=(16, 2))
+    
+    # Notes
+    notes = fields.Text(string='Line Notes')
+    
+    @api.depends('budget_id.date_from', 'budget_id.date_to', 'account_id')
+    def _compute_actual(self):
+        for line in self:
+            if not line.budget_id or not line.account_id:
+                line.actual_amount = 0
+                continue
+            
+            # Get actual spend from journal entries within budget period
+            domain = [
+                ('account_id', '=', line.account_id.id),
+                ('date', '>=', line.budget_id.date_from),
+                ('date', '<=', line.budget_id.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('company_id', '=', line.budget_id.company_id.id),
+            ]
+            
+            move_lines = self.env['custom_accounting.move.line'].search(domain)
+            
+            if line.account_id.account_type in ('expense', 'asset'):
+                # For expense and asset accounts, debit increases, credit decreases
+                actual = sum(move_lines.mapped('debit')) - sum(move_lines.mapped('credit'))
+            else:
+                # For income, liability, equity accounts
+                actual = sum(move_lines.mapped('credit')) - sum(move_lines.mapped('debit'))
+            
+            line.actual_amount = abs(actual)
+    
+    @api.depends('budget_amount', 'actual_amount')
+    def _compute_variance(self):
+        for line in self:
+            line.variance = line.budget_amount - line.actual_amount
+            
+            if line.budget_amount != 0:
+                line.variance_percentage = (line.variance / line.budget_amount) * 100
+            else:
+                line.variance_percentage = 0
+    
+    @api.depends('variance', 'actual_amount')
+    def _compute_status(self):
+        for line in self:
+            if line.actual_amount == 0:
+                line.status = 'no_activity'
+            elif abs(line.variance_percentage) <= 5:  # Within 5% tolerance
+                line.status = 'on_budget'
+            elif line.variance > 0:
+                line.status = 'under_budget'
+            else:
+                line.status = 'over_budget'
+    
+    @api.onchange('account_id')
+    def _onchange_account_id(self):
+        if self.account_id:
+            self.account_type = self.account_id.account_type
+
+
+
+========== ./models/check_descriptions.py ==========
+#!/usr/bin/env python3
+import os
+import re
+import ast
+
+def check_file(filepath):
+    with open(filepath, 'r') as f:
+        content = f.read()
+    
+    # Use AST to find class definitions
+    tree = ast.parse(content)
+    
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            # Check if class inherits from models.Model
+            for base in node.bases:
+                if (isinstance(base, ast.Attribute) and base.attr == 'Model' and 
+                    isinstance(base.value, ast.Name) and base.value.id == 'models'):
+                    # Check for _description attribute
+                    has_desc = False
+                    for subnode in node.body:
+                        if isinstance(subnode, ast.Assign):
+                            for target in subnode.targets:
+                                if isinstance(target, ast.Name) and target.id == '_description':
+                                    has_desc = True
+                                    break
+                    
+                    if not has_desc:
+                        print(f"❌ {os.path.basename(filepath)}: Class '{node.name}' missing _description")
+                    else:
+                        print(f"✅ {os.path.basename(filepath)}: Class '{node.name}' has _description")
+
+# Check all Python files
+for filename in os.listdir('.'):
+    if filename.endswith('.py') and filename != '__init__.py' and filename != 'check_descriptions.py':
+        check_file(filename)
+
+
+
+========== ./models/cost_center.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CostCenter(models.Model):
+    _name = 'custom_accounting.cost.center'
+    _description = 'Cost Center'
+    
+    name = fields.Char(string='Cost Center Name', required=True)
+    code = fields.Char(string='Cost Center Code', required=True, size=10)
+    parent_id = fields.Many2one('custom_accounting.cost.center', string='Parent Cost Center')
+    child_ids = fields.One2many('custom_accounting.cost.center', 'parent_id', 
+                               string='Child Cost Centers')
+    
+    manager_id = fields.Many2one('res.users', string='Cost Center Manager')
+    department_id = fields.Many2one('hr.department', string='Department')
+    
+    active = fields.Boolean(string='Active', default=True)
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company)
+    
+    description = fields.Text(string='Description')
+    
+    _sql_constraints = [
+        ('code_company_uniq', 'unique(code, company_id)', 
+         'Cost center code must be unique per company!'),
+    ]
+
+
+
+========== ./models/dashboard.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+from datetime import date, timedelta
+
+class AccountingDashboard(models.Model):
+    _name = 'custom_accounting.dashboard'
+    _description = 'Accounting Dashboard'
+    _order = 'id desc'
+
+    name = fields.Char(string="Name", default="Accounting Dashboard", readonly=True)
+
+    # === KPIs ===
+    total_revenue = fields.Float(string="Total Revenue", compute='_compute_kpis', store=False)
+    total_expenses = fields.Float(string="Total Expenses", compute='_compute_kpis', store=False)
+    net_income = fields.Float(string="Net Income", compute='_compute_kpis', store=False)
+    cash_balance = fields.Float(string="Cash & Bank Balance", compute='_compute_kpis', store=False)
+    accounts_receivable = fields.Float(string="Accounts Receivable", compute='_compute_kpis', store=False)
+    accounts_payable = fields.Float(string="Accounts Payable", compute='_compute_kpis', store=False)
+    total_assets = fields.Float(string="Total Assets", compute='_compute_kpis', store=False)
+    total_liabilities = fields.Float(string="Total Liabilities", compute='_compute_kpis', store=False)
+    equity = fields.Float(string="Equity", compute='_compute_kpis', store=False)
+
+    # === Period ===
+    period = fields.Selection([
+        ('today', 'Today'),
+        ('week', 'This Week'),
+        ('month', 'This Month'),
+        ('quarter', 'This Quarter'),
+        ('year', 'This Year'),
+    ], default='month', string="Period")
+
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+    currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
+
+    @api.depends('period', 'company_id')
+    def _compute_kpis(self):
+        Account = self.env['custom_accounting.account']
+        for dashboard in self:
+            # Revenue & Expenses (P&L accounts)
+            dashboard.total_revenue = sum(Account.search([
+                ('account_type', '=', 'income'),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            dashboard.total_expenses = sum(Account.search([
+                ('account_type', '=', 'expense'),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            dashboard.net_income = dashboard.total_revenue - dashboard.total_expenses
+
+            # Cash & Bank
+            cash_accounts = Account.search([
+                ('code', 'in', ['900001', '900002']),
+                ('company_id', '=', dashboard.company_id.id)
+            ])
+            dashboard.cash_balance = sum(cash_accounts.mapped('balance'))
+
+            # AR / AP
+            dashboard.accounts_receivable = sum(Account.search([
+                ('account_type', '=', 'asset'),
+                ('reconcile', '=', True),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            dashboard.accounts_payable = sum(Account.search([
+                ('account_type', '=', 'liability'),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            # Balance Sheet Totals
+            dashboard.total_assets = sum(Account.search([
+                ('account_type', '=', 'asset'),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            dashboard.total_liabilities = sum(Account.search([
+                ('account_type', 'in', ['liability', 'equity']),
+                ('company_id', '=', dashboard.company_id.id)
+            ]).mapped('balance'))
+
+            dashboard.equity = dashboard.total_assets - dashboard.total_liabilities
+
+
+
+========== ./models/__init__.py ==========
+from . import account
+from . import journal
+from . import move
+from . import move_line
+from . import asset
+from . import bank_transaction
+from . import reconciliation
+from . import dashboard
+from . import tax
+from . import payment
+from . import invoice
+from . import budget
+from . import cost_center
+from . import recurring_transaction
+from . import trial_balance
+
+
+
+========== ./models/invoice.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
+from datetime import timedelta
+
+class CustomInvoice(models.Model):
+    _name = 'custom_accounting.invoice'
+    _description = 'Invoice'
+    
+    name = fields.Char(string='Number', default='/', readonly=True)
+    invoice_date = fields.Date(default=fields.Date.today, required=True)
+    due_date = fields.Date(default=lambda self: fields.Date.today() + timedelta(days=30), required=True)
+    
+    type = fields.Selection([
+        ('out_invoice', 'Customer Invoice'),
+        ('in_invoice', 'Vendor Bill'),
+    ], default='out_invoice', required=True)
+    
+    partner_id = fields.Many2one('res.partner', string='Customer/Vendor', required=True)
+    journal_id = fields.Many2one('custom_accounting.journal', required=True)
+    
+    invoice_line_ids = fields.One2many('custom_accounting.invoice.line', 'invoice_id', string='Lines')
+    
+    amount_total = fields.Float(compute='_compute_amounts', store=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('cancelled', 'Cancelled'),
+    ], default='draft')
+    
+    move_id = fields.Many2one('custom_accounting.move', readonly=True)
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+    
+    @api.depends('invoice_line_ids.subtotal')
+    def _compute_amounts(self):
+        for invoice in self:
+            invoice.amount_total = sum(invoice.invoice_line_ids.mapped('subtotal'))
+    
+    @api.model
+    def create(self, vals):
+        if vals.get('name', '/') == '/':
+            if vals.get('type', 'out_invoice') == 'out_invoice':
+                vals['name'] = self.env['ir.sequence'].next_by_code('custom_accounting.invoice.customer') or '/'
+            else:
+                vals['name'] = self.env['ir.sequence'].next_by_code('custom_accounting.invoice.vendor') or '/'
+        return super().create(vals)
+    
+    def action_post(self):
+        for invoice in self:
+            if invoice.state != 'draft':
+                raise UserError(_("Only draft invoices can be posted!"))
+            
+            # Find an account
+            account = self.env['custom_accounting.account'].search([], limit=1)
+            if not account:
+                account = self.env['custom_accounting.account'].create({
+                    'name': 'Default Account',
+                    'code': '100000',
+                    'account_type': 'asset',
+                })
+            
+            # Create journal entry
+            move_lines = [(0, 0, {
+                'name': invoice.name,
+                'account_id': account.id,
+                'partner_id': invoice.partner_id.id,
+                'debit': invoice.amount_total if invoice.type == 'out_invoice' else 0,
+                'credit': invoice.amount_total if invoice.type == 'in_invoice' else 0,
+            })]
+            
+            for line in invoice.invoice_line_ids:
+                move_lines.append((0, 0, {
+                    'name': line.name,
+                    'account_id': line.account_id.id,
+                    'debit': line.subtotal if invoice.type == 'in_invoice' else 0,
+                    'credit': line.subtotal if invoice.type == 'out_invoice' else 0,
+                }))
+            
+            move = self.env['custom_accounting.move'].create({
+                'date': invoice.invoice_date,
+                'journal_id': invoice.journal_id.id,
+                'ref': invoice.name,
+                'line_ids': move_lines,
+            })
+            move.action_post()
+            invoice.move_id = move
+            invoice.state = 'posted'
+            return True
+    
+    def action_cancel(self):
+        for invoice in self:
+            if invoice.move_id:
+                invoice.move_id.action_cancel()
+            invoice.state = 'cancelled'
+            return True
+
+class InvoiceLine(models.Model):
+    _name = 'custom_accounting.invoice.line'
+    _description = 'Invoice Line'
+    
+    invoice_id = fields.Many2one('custom_accounting.invoice', required=True, ondelete='cascade')
+    name = fields.Char(required=True)
+    account_id = fields.Many2one('custom_accounting.account', required=True)
+    quantity = fields.Float(default=1.0)
+    price_unit = fields.Float(required=True)
+    subtotal = fields.Float(compute='_compute_subtotal', store=True)
+    
+    @api.depends('quantity', 'price_unit')
+    def _compute_subtotal(self):
+        for line in self:
+            line.subtotal = line.quantity * line.price_unit
+
+class PaymentTerm(models.Model):
+    _name = 'custom_accounting.payment.term'
+    _description = 'Payment Terms'
+    
+    name = fields.Char(required=True)
+    active = fields.Boolean(default=True)
+
+class PaymentTermLine(models.Model):
+    _name = 'custom_accounting.payment.term.line'
+    _description = 'Payment Term Line'
+    
+    payment_term_id = fields.Many2one('custom_accounting.payment.term', required=True)
+    value = fields.Float(required=True)
+    days = fields.Integer(default=0)
+
+
+
+========== ./models/journal.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CustomJournal(models.Model):
+    _name = 'custom_accounting.journal'
+    _description = 'Accounting Journal'
+
+    name = fields.Char(string='Journal Name', required=True)
+    code = fields.Char(string='Short Code', required=True, size=8)
+    type = fields.Selection([
+        ('sale', 'Sales'),
+        ('purchase', 'Purchase'),
+        ('cash', 'Cash'),
+        ('bank', 'Bank'),
+        ('general', 'General'),
+    ], string='Type', required=True, default='general')
+
+    default_account_id = fields.Many2one('custom_accounting.account', string='Default Account')
+    profit_account_id = fields.Many2one('custom_accounting.account', string='Profit Account')
+    loss_account_id = fields.Many2one('custom_accounting.account', string='Loss Account')
+
+    sequence_id = fields.Many2one('ir.sequence', string='Entry Sequence')
+    refund_sequence_id = fields.Many2one('ir.sequence', string='Credit Note Sequence')
+
+    active = fields.Boolean(default=True)
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
+
+    @api.model
+    def create(self, vals):
+        journal = super().create(vals)
+        if not journal.sequence_id:
+            seq = self.env['ir.sequence'].create({
+                'name': f"{journal.name} Sequence",
+                'code': f"custom_accounting.move.{journal.code}",
+                'padding': 5,
+                'company_id': journal.company_id.id,
+            })
+            journal.sequence_id = seq.id
+        return journal
+
+
+
+========== ./models/__manifest__.py ==========
+{
+    'name': 'Custom Accounting Extended Pro',
+    'version': '1.0',
+    'summary': 'Complete accounting system with advanced features',
+    'description': """
+        Advanced accounting system with:
+        - Chart of Accounts
+        - Journals and Transactions
+        - Invoicing (Customer/Vendor)
+        - Payments
+        - Budget Management
+        - Tax Management
+        - Recurring Entries
+    """,
+    'author': 'Your Name',
+    'website': 'https://yourwebsite.com',
+    'category': 'Accounting',
+    'depends': ['base', 'mail'],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/account_views.xml',
+        'views/journal_views.xml',
+        'views/move_views.xml',
+        'views/tax_views.xml',
+        'views/budget_views.xml',
+        'views/payment_views.xml',
+        'views/dashboard_views.xml',
+        'views/invoice_views.xml',
+        'views/recurring_views.xml',  # Add this if you created the file
+        'views/menu.xml',
+    ],
+    'demo': [],
+    'installable': True,
+    'application': True,
+    'auto_install': False,
+}
+
+
+
+========== ./models/move_line.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CustomMoveLine(models.Model):
+    _name = 'custom_accounting.move.line'
+    _description = 'Journal Item'
+
+    move_id = fields.Many2one('custom_accounting.move', required=True, ondelete='cascade')
+    name = fields.Char(string='Label', required=True)
+    account_id = fields.Many2one('custom_accounting.account', required=True)
+    partner_id = fields.Many2one('res.partner', string='Partner')
+    debit = fields.Float(default=0.0)
+    credit = fields.Float(default=0.0)
+    date = fields.Date(related='move_id.date', store=True)
+    company_id = fields.Many2one(related='move_id.company_id')
+    reconciled = fields.Boolean(string='Reconciled', default=False)
+    balance = fields.Float(string='Balance', compute='_compute_balance', store=True)
+
+    @api.depends('debit', 'credit')
+    def _compute_balance(self):
+        for line in self:
+            line.balance = line.debit - line.credit
+
+    @api.constrains('debit', 'credit')
+    def _check_amounts(self):
+        for line in self:
+            if line.debit < 0 or line.credit < 0:
+                raise models.ValidationError("Debit and Credit cannot be negative.")
+            if line.debit > 0 and line.credit > 0:
+                raise models.ValidationError("You cannot have both debit and credit on the same line.")
+
+
+
+========== ./models/move.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
+
+class CustomMove(models.Model):
+    _name = 'custom_accounting.move'
+    _description = 'Journal Entry'
+    _order = 'date desc, name desc'
+
+    name = fields.Char(string='Number', default='/', copy=False)
+    date = fields.Date(required=True, default=fields.Date.context_today)
+    ref = fields.Char(string='Reference')
+    journal_id = fields.Many2one('custom_accounting.journal', required=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('cancel', 'Cancelled')
+    ], default='draft')
+    
+    # Link fields to other models (keep only asset_id for now)
+    asset_id = fields.Many2one('custom_accounting.asset', string='Asset', ondelete='set null')
+    # REMOVED: invoice_id = fields.Many2one('custom_accounting.invoice', string='Invoice', ondelete='set null')
+    
+    line_ids = fields.One2many('custom_accounting.move.line', 'move_id', string='Journal Items')
+    amount_total = fields.Float(compute='_compute_amount', store=True)
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+
+    @api.depends('line_ids.debit', 'line_ids.credit')
+    def _compute_amount(self):
+        for move in self:
+            move.amount_total = sum(move.line_ids.mapped('debit'))
+
+    @api.model
+    def create(self, vals):
+        if vals.get('name', '/') == '/':
+            vals['name'] = self.env['ir.sequence'].next_by_code('custom_accounting.move') or '/'
+        return super().create(vals)
+
+    def action_post(self):
+        for move in self:
+            if move.state != 'draft':
+                continue
+            debit = sum(move.line_ids.mapped('debit'))
+            credit = sum(move.line_ids.mapped('credit'))
+            if abs(debit - credit) > 0.01:
+                raise UserError(_("The journal entry is not balanced! Debit: %s | Credit: %s") % (debit, credit))
+            move.state = 'posted'
+
+    def action_cancel(self):
+        self.write({'state': 'cancel'})
+
+    def action_draft(self):
+        self.write({'state': 'draft'})
+
+
+
+========== ./models/payment.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
+
+class CustomPayment(models.Model):
+    _name = 'custom_accounting.payment'
+    _description = 'Customer / Vendor Payment'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _order = 'date desc, name desc'
+
+    name = fields.Char(string='Number', default='New', copy=False)
+    date = fields.Date(required=True, default=fields.Date.today)
+    amount = fields.Float(required=True)
+    payment_type = fields.Selection([
+        ('inbound', 'Customer Payment'),
+        ('outbound', 'Vendor Payment')
+    ], required=True, default='inbound')
+    partner_id = fields.Many2one('res.partner', string='Partner', required=True)
+    journal_id = fields.Many2one('custom_accounting.journal', string='Journal', required=True)
+    account_id = fields.Many2one('custom_accounting.account', string='Bank/Cash Account', required=True)
+    
+    # CHANGE FROM Many2many TO Many2one:
+    invoice_id = fields.Many2one('custom_accounting.invoice', string='Invoice', ondelete='set null')
+    
+    move_id = fields.Many2one('custom_accounting.move', string='Journal Entry', readonly=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('cancelled', 'Cancelled')
+    ], default='draft', tracking=True)
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+
+    @api.model
+    def create(self, vals):
+        if vals.get('name', 'New') == 'New':
+            seq = 'custom_accounting.payment.in' if vals.get('payment_type') == 'inbound' else 'custom_accounting.payment.out'
+            vals['name'] = self.env['ir.sequence'].next_by_code(seq) or 'New'
+        return super().create(vals)
+
+    def action_post(self):
+        for pay in self:
+            if pay.state != 'draft':
+                continue
+            counter_account = pay.partner_id.property_account_receivable_id if pay.payment_type == 'inbound' else pay.partner_id.property_account_payable_id
+            lines = [
+                (0, 0, {'name': pay.name, 'account_id': pay.account_id.id,
+                        'debit': pay.amount if pay.payment_type == 'inbound' else 0,
+                        'credit': pay.amount if pay.payment_type == 'outbound' else 0,
+                        'partner_id': pay.partner_id.id}),
+                (0, 0, {'name': pay.name, 'account_id': counter_account.id,
+                        'debit': pay.amount if pay.payment_type == 'outbound' else 0,
+                        'credit': pay.amount if pay.payment_type == 'inbound' else 0,
+                        'partner_id': pay.partner_id.id}),
+            ]
+            move = self.env['custom_accounting.move'].create({
+                'date': pay.date,
+                'journal_id': pay.journal_id.id,
+                'ref': pay.name,
+                'line_ids': lines,
+            })
+            move.action_post()
+            pay.move_id = move.id
+            pay.state = 'posted'
+
+
+
+========== ./models/purchase_order.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class PurchaseOrder(models.Model):
+    _inherit = 'purchase.order'
+    _description = 'Purchase Order Extension'
+
+    custom_reference = fields.Char(string="Custom Reference")
+    approval_date = fields.Date(string="Approval Date")
+    approved_by = fields.Many2one('res.users', string="Approved By")
+    accounting_note = fields.Text(string="Accounting Note")
+
+    def button_approve(self, force=False):
+        res = super().button_approve(force=force)
+        self.write({
+            'approval_date': fields.Date.today(),
+            'approved_by': self.env.user.id,
+        })
+        return res
+
+
+
+========== ./models/reconciliation.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError, ValidationError
+from datetime import date
+
+class Reconciliation(models.Model):
+    _name = 'custom_accounting.reconciliation'
+    _description = 'Bank Reconciliation'
+    _order = 'date desc, id desc'
+    
+    name = fields.Char(string='Reference', required=True, default=lambda self: self.env['ir.sequence'].next_by_code('custom_accounting.reconciliation'))
+    date = fields.Date(string='Reconciliation Date', required=True, default=fields.Date.today)
+    bank_account_id = fields.Many2one('custom_accounting.account', string='Bank Account', 
+                                      required=True, domain=[('type', '=', 'bank')])
+    statement_date = fields.Date(string='Statement Date', required=True)
+    statement_balance = fields.Float(string='Statement Balance', required=True)
+    reconciled_balance = fields.Float(string='Reconciled Balance', compute='_compute_reconciled_balance', store=True)
+    difference = fields.Float(string='Difference', compute='_compute_difference', store=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled')
+    ], string='Status', default='draft', required=True)
+    
+    # Lines
+    line_ids = fields.One2many('custom_accounting.reconciliation.line', 'reconciliation_id', string='Reconciliation Lines')
+    move_line_ids = fields.One2many('custom_accounting.move.line', compute='_compute_move_lines', string='Unreconciled Move Lines')
+    
+    # Computed fields
+    @api.depends('line_ids', 'line_ids.amount', 'line_ids.is_reconciled')
+    def _compute_reconciled_balance(self):
+        for rec in self:
+            reconciled_amount = sum(line.amount for line in rec.line_ids.filtered(lambda l: l.is_reconciled))
+            rec.reconciled_balance = reconciled_amount
+    
+    @api.depends('statement_balance', 'reconciled_balance')
+    def _compute_difference(self):
+        for rec in self:
+            rec.difference = rec.statement_balance - rec.reconciled_balance
+    
+    @api.depends('bank_account_id', 'date')
+    def _compute_move_lines(self):
+        for rec in self:
+            if rec.bank_account_id:
+                move_lines = self.env['custom_accounting.move.line'].search([
+                    ('account_id', '=', rec.bank_account_id.id),
+                    ('reconciled', '=', False),
+                    ('move_id.state', '=', 'posted'),
+                    ('date', '<=', rec.date)
+                ])
+                rec.move_line_ids = move_lines
+            else:
+                rec.move_line_ids = False
+    
+    # Actions
+    def action_start_reconciliation(self):
+        self.write({'state': 'in_progress'})
+    
+    def action_complete_reconciliation(self):
+        if abs(self.difference) > 0.01:
+            raise UserError(_('Reconciliation cannot be completed. Difference must be zero.'))
+        
+        # Mark lines as reconciled
+        for line in self.line_ids.filtered(lambda l: l.is_reconciled):
+            if line.move_line_id:
+                line.move_line_id.write({'reconciled': True})
+        
+        self.write({'state': 'completed'})
+    
+    def action_cancel(self):
+        self.write({'state': 'cancelled'})
+    
+    def action_reset_draft(self):
+        self.write({'state': 'draft'})
+    
+    # Constraints
+    @api.constrains('statement_balance')
+    def _check_statement_balance(self):
+        for rec in self:
+            if rec.statement_balance < 0:
+                raise ValidationError(_('Statement balance cannot be negative.'))
+
+class ReconciliationLine(models.Model):
+    _name = 'custom_accounting.reconciliation.line'
+    _description = 'Bank Reconciliation Line'
+    
+    reconciliation_id = fields.Many2one('custom_accounting.reconciliation', string='Reconciliation', required=True, ondelete='cascade')
+    move_line_id = fields.Many2one('custom_accounting.move.line', string='Journal Item', required=True)
+    date = fields.Date(string='Date', related='move_line_id.date', store=True)
+    description = fields.Char(string='Description', related='move_line_id.name', store=True)
+    
+    # Calculate amount based on debit/credit
+    amount = fields.Float(string='Amount', compute='_compute_amount', store=True)
+    
+    is_reconciled = fields.Boolean(string='Reconciled', default=True)
+    
+    @api.depends('move_line_id', 'move_line_id.debit', 'move_line_id.credit')
+    def _compute_amount(self):
+        for line in self:
+            if line.move_line_id:
+                # For bank accounts, debit increases balance, credit decreases balance
+                # So amount = debit - credit
+                line.amount = line.move_line_id.balance
+            else:
+                line.amount = 0.0
+    
+    # Constraints
+    @api.constrains('move_line_id')
+    def _check_move_line_uniqueness(self):
+        for line in self:
+            existing = self.search([
+                ('move_line_id', '=', line.move_line_id.id),
+                ('reconciliation_id', '!=', line.reconciliation_id.id),
+                ('reconciliation_id.state', 'in', ['draft', 'in_progress'])
+            ])
+            if existing:
+                raise ValidationError(_('This journal item is already being reconciled in another reconciliation.'))
+
+
+
+========== ./models/recurring_transaction.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError, ValidationError
+from dateutil.relativedelta import relativedelta
+from datetime import datetime
+
+class RecurringTransaction(models.Model):
+    _name = 'custom_accounting.recurring'
+    _description = 'Recurring Transaction Template'
+    _order = 'next_date, name'
+    
+    # Basic Information
+    name = fields.Char(string='Name', required=True)
+    description = fields.Text(string='Description')
+    
+    # Scheduling
+    journal_id = fields.Many2one('custom_accounting.journal', string='Journal', required=True)
+    interval_number = fields.Integer(string='Interval', default=1, required=True)
+    interval_type = fields.Selection([
+        ('days', 'Days'),
+        ('weeks', 'Weeks'),
+        ('months', 'Months'),
+        ('years', 'Years')
+    ], string='Interval Unit', default='months', required=True)
+    
+    # Execution
+    next_date = fields.Date(string='Next Execution Date', required=True, default=fields.Date.today)
+    last_executed = fields.Date(string='Last Executed')
+    total_executions = fields.Integer(string='Total Executions', default=0)
+    max_executions = fields.Integer(string='Maximum Executions', default=0)  # 0 = unlimited
+    
+    # Lines
+    line_ids = fields.One2many('custom_accounting.recurring.line', 'recurring_id', string='Transaction Lines')
+    
+    # Status
+    active = fields.Boolean(string='Active', default=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('running', 'Running'),
+        ('paused', 'Paused'),
+        ('completed', 'Completed')
+    ], string='Status', default='draft', required=True)
+    
+    # Computed fields
+    @api.depends('line_ids', 'line_ids.debit', 'line_ids.credit')
+    def _compute_total_amount(self):
+        for rec in self:
+            total_debit = sum(line.debit for line in rec.line_ids)
+            total_credit = sum(line.credit for line in rec.line_ids)
+            rec.total_debit = total_debit
+            rec.total_credit = total_credit
+    
+    total_debit = fields.Float(string='Total Debit', compute='_compute_total_amount', store=True)
+    total_credit = fields.Float(string='Total Credit', compute='_compute_total_amount', store=True)
+    
+    # Constraints
+    @api.constrains('interval_number')
+    def _check_interval_number(self):
+        for rec in self:
+            if rec.interval_number <= 0:
+                raise ValidationError(_('Interval must be greater than zero.'))
+    
+    @api.constrains('line_ids')
+    def _check_lines_balance(self):
+        for rec in self:
+            if abs(rec.total_debit - rec.total_credit) > 0.01:
+                raise ValidationError(_('Debit and credit totals must be equal.'))
+    
+    # Actions
+    def action_activate(self):
+        self.write({'state': 'running', 'active': True})
+    
+    def action_pause(self):
+        self.write({'state': 'paused'})
+    
+    def action_complete(self):
+        self.write({'state': 'completed', 'active': False})
+    
+    def action_generate_entries(self):
+        """Generate journal entries for all due recurring transactions"""
+        due_transactions = self.search([
+            ('state', '=', 'running'),
+            ('active', '=', True),
+            ('next_date', '<=', fields.Date.today())
+        ])
+        
+        generated_moves = []
+        for transaction in due_transactions:
+            moves = transaction._generate_journal_entry()
+            generated_moves.extend(moves)
+            
+            # Update transaction
+            transaction.last_executed = fields.Date.today()
+            transaction.total_executions += 1
+            
+            # Calculate next date
+            if transaction.interval_type == 'days':
+                delta = relativedelta(days=transaction.interval_number)
+            elif transaction.interval_type == 'weeks':
+                delta = relativedelta(weeks=transaction.interval_number)
+            elif transaction.interval_type == 'months':
+                delta = relativedelta(months=transaction.interval_number)
+            else:  # years
+                delta = relativedelta(years=transaction.interval_number)
+            
+            transaction.next_date = transaction.next_date + delta
+            
+            # Check if max executions reached
+            if transaction.max_executions > 0 and transaction.total_executions >= transaction.max_executions:
+                transaction.action_complete()
+        
+        # Return action to view generated moves
+        if generated_moves:
+            return {
+                'name': _('Generated Journal Entries'),
+                'type': 'ir.actions.act_window',
+                'res_model': 'custom_accounting.move',
+                'view_mode': 'tree,form',
+                'domain': [('id', 'in', generated_moves)],
+                'context': {'create': False},
+            }
+        else:
+            raise UserError(_('No recurring transactions were due for execution.'))
+    
+    def _generate_journal_entry(self):
+        """Generate a single journal entry for this recurring transaction"""
+        self.ensure_one()
+        
+        # Create move lines
+        move_lines = []
+        for line in self.line_ids:
+            move_lines.append((0, 0, {
+                'account_id': line.account_id.id,
+                'name': line.name,
+                'debit': line.debit,
+                'credit': line.credit,
+            }))
+        
+        # Create journal entry
+        move = self.env['custom_accounting.move'].create({
+            'name': 'Recurring: %s' % self.name,
+            'date': self.next_date,
+            'journal_id': self.journal_id.id,
+            'ref': self.description or self.name,
+            'line_ids': move_lines,
+        })
+        
+        # Post the move
+        move.action_post()
+        
+        return [move.id]
+    
+    @api.model
+    def cron_generate_recurring_entries(self):
+        """Cron job to automatically generate recurring entries"""
+        self.action_generate_entries()
+
+class RecurringLine(models.Model):
+    _name = 'custom_accounting.recurring.line'
+    _description = 'Recurring Transaction Line'
+    
+    recurring_id = fields.Many2one('custom_accounting.recurring', string='Recurring Transaction', required=True, ondelete='cascade')
+    sequence = fields.Integer(string='Sequence', default=10)
+    
+    name = fields.Char(string='Description', required=True)
+    account_id = fields.Many2one('custom_accounting.account', string='Account', required=True)
+    debit = fields.Float(string='Debit', default=0.0, digits=(16, 2))
+    credit = fields.Float(string='Credit', default=0.0, digits=(16, 2))
+    
+    # Partner information (optional)
+    partner_id = fields.Many2one('res.partner', string='Partner')
+    
+    # Analytic accounting (optional)
+    analytic_account_id = fields.Many2one('account.analytic.account', string='Analytic Account')
+    
+    _order = 'sequence, id'
+
+
+
+========== ./models/tax.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CustomTax(models.Model):
+    _name = 'custom_accounting.tax'
+    _description = 'Tax Definition'
+
+    name = fields.Char(required=True, translate=True)
+    code = fields.Char(string="Short Code")
+    rate = fields.Float(required=True, default=0.0)
+    tax_type = fields.Selection([
+        ('vat', 'VAT'),
+        ('wht', 'Withholding Tax'),
+        ('sales', 'Sales Tax'),
+        ('other', 'Other')
+    ], default='vat')
+    account_id = fields.Many2one('custom_accounting.account', string='Tax Account', required=True)
+    refund_account_id = fields.Many2one('custom_accounting.account', string='Tax Refund Account')
+    active = fields.Boolean(default=True)
+    company_id = fields.Many2one('res.company', default=lambda self: self.env.company)
+    
+    # Add state field
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('active', 'Active'),
+        ('inactive', 'Inactive')
+    ], default='draft', string='Status')
+    
+    tax_authority = fields.Selection([
+        ('firs', 'FIRS'),
+        ('lirs', 'LIRS'),
+        ('others', 'Other State'),
+    ], string='Tax Authority')
+    tax_id_number = fields.Char(string='TIN')
+    tax_certificate = fields.Char(string='Certificate No')
+    effective_date = fields.Date(string='Effective Date')
+    expiry_date = fields.Date(string='Expiry Date')
+    
+    is_withholding = fields.Boolean(string='Withholding Tax', default=False)
+    price_include = fields.Boolean(string='Included in Price', default=False)
+    
+    def action_compute_sample(self):
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Sample Computation',
+                'message': 'This is a sample tax computation.',
+                'type': 'info',
+            }
+        }
+
+
+
+========== ./models/trial_balance.py ==========
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
+from datetime import date
+import io
+import base64
+
+class TrialBalanceWizard(models.TransientModel):
+    _name = 'custom_accounting.trial.balance.wizard'
+    _description = 'Trial Balance Report Wizard'
+    
+    date_from = fields.Date(string='From Date', required=True, default=lambda self: fields.Date.today().replace(day=1))
+    date_to = fields.Date(string='To Date', required=True, default=fields.Date.today)
+    target_move = fields.Selection([
+        ('posted', 'All Posted Entries'),
+        ('all', 'All Entries')
+    ], string='Target Moves', required=True, default='posted')
+    
+    # Results fields
+    result_html = fields.Html(string='Result', compute='_compute_result', sanitize=False)
+    excel_file = fields.Binary(string='Excel File', compute='_compute_excel_file')
+    excel_filename = fields.Char(string='Filename', compute='_compute_excel_filename')
+    
+    @api.depends('date_from', 'date_to', 'target_move')
+    def _compute_result(self):
+        for wizard in self:
+            lines = self._get_trial_balance_lines()
+            
+            # Calculate totals
+            total_debit = sum(line['debit'] for line in lines)
+            total_credit = sum(line['credit'] for line in lines)
+            total_balance = sum(line['balance'] for line in lines)
+            
+            # Generate HTML table
+            html = '''
+            <div class="trial-balance-report">
+                <h3>Trial Balance Report</h3>
+                <p>Period: %s to %s</p>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Account Code</th>
+                            <th>Account Name</th>
+                            <th>Type</th>
+                            <th>Opening Balance</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                            <th>Closing Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            ''' % (wizard.date_from, wizard.date_to)
+            
+            for line in lines:
+                html += '''
+                    <tr>
+                        <td>%s</td>
+                        <td>%s</td>
+                        <td>%s</td>
+                        <td style="text-align: right">%s</td>
+                        <td style="text-align: right">%s</td>
+                        <td style="text-align: right">%s</td>
+                        <td style="text-align: right">%s</td>
+                    </tr>
+                ''' % (
+                    line['code'] or '',
+                    line['name'] or '',
+                    line['type'] or '',
+                    '{:,.2f}'.format(line['opening']),
+                    '{:,.2f}'.format(line['debit']),
+                    '{:,.2f}'.format(line['credit']),
+                    '{:,.2f}'.format(line['balance'])
+                )
+            
+            html += '''
+                    </tbody>
+                    <tfoot>
+                        <tr style="font-weight: bold;">
+                            <td colspan="4">Totals</td>
+                            <td style="text-align: right">%s</td>
+                            <td style="text-align: right">%s</td>
+                            <td style="text-align: right">%s</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            ''' % (
+                '{:,.2f}'.format(total_debit),
+                '{:,.2f}'.format(total_credit),
+                '{:,.2f}'.format(total_balance)
+            )
+            
+            wizard.result_html = html
+    
+    def _get_trial_balance_lines(self):
+        self.ensure_one()
+        
+        # Domain for moves
+        domain = [
+            ('date', '>=', self.date_from),
+            ('date', '<=', self.date_to)
+        ]
+        
+        if self.target_move == 'posted':
+            domain.append(('state', '=', 'posted'))
+        
+        # Get all posted moves in period
+        moves = self.env['custom_accounting.move'].search(domain)
+        move_lines = self.env['custom_accounting.move.line'].search([
+            ('move_id', 'in', moves.ids)
+        ])
+        
+        # Get all accounts
+        accounts = self.env['custom_accounting.account'].search([])
+        
+        results = []
+        
+        for account in accounts:
+            # Opening balance (before date_from)
+            opening_domain = [
+                ('account_id', '=', account.id),
+                ('date', '<', self.date_from),
+                ('move_id.state', '=', 'posted')
+            ]
+            opening_lines = self.env['custom_accounting.move.line'].search(opening_domain)
+            opening_balance = sum(line.balance for line in opening_lines)
+            
+            # Period activity
+            period_domain = [
+                ('account_id', '=', account.id),
+                ('date', '>=', self.date_from),
+                ('date', '<=', self.date_to)
+            ]
+            if self.target_move == 'posted':
+                period_domain.append(('move_id.state', '=', 'posted'))
+            
+            period_lines = self.env['custom_accounting.move.line'].search(period_domain)
+            
+            period_debit = sum(line.debit for line in period_lines)
+            period_credit = sum(line.credit for line in period_lines)
+            period_balance = sum(line.balance for line in period_lines)
+            
+            # Closing balance
+            closing_balance = opening_balance + period_balance
+            
+            # Only include accounts with activity
+            if opening_balance != 0 or period_debit != 0 or period_credit != 0:
+                results.append({
+                    'code': account.code,
+                    'name': account.name,
+                    'type': account.type,
+                    'opening': opening_balance,
+                    'debit': period_debit,
+                    'credit': period_credit,
+                    'balance': closing_balance,
+                })
+        
+        # Sort by account code
+        results.sort(key=lambda x: x['code'] or '')
+        
+        return results
+    
+    def _compute_excel_file(self):
+        for wizard in self:
+            import xlsxwriter
+            
+            output = io.BytesIO()
+            workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+            worksheet = workbook.add_worksheet('Trial Balance')
+            
+            # Formats
+            header_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'bg_color': '#366092',
+                'font_color': 'white',
+                'border': 1
+            })
+            
+            currency_format = workbook.add_format({
+                'num_format': '#,##0.00',
+                'border': 1
+            })
+            
+            # Write headers
+            headers = ['Account Code', 'Account Name', 'Type', 'Opening Balance', 'Debit', 'Credit', 'Closing Balance']
+            for col, header in enumerate(headers):
+                worksheet.write(0, col, header, header_format)
+            
+            # Get data
+            lines = wizard._get_trial_balance_lines()
+            
+            # Write data
+            for row, line in enumerate(lines, start=1):
+                worksheet.write(row, 0, line['code'] or '')
+                worksheet.write(row, 1, line['name'] or '')
+                worksheet.write(row, 2, line['type'] or '')
+                worksheet.write(row, 3, line['opening'], currency_format)
+                worksheet.write(row, 4, line['debit'], currency_format)
+                worksheet.write(row, 5, line['credit'], currency_format)
+                worksheet.write(row, 6, line['balance'], currency_format)
+            
+            # Auto-fit columns
+            for col in range(len(headers)):
+                worksheet.set_column(col, col, 15)
+            
+            workbook.close()
+            output.seek(0)
+            
+            wizard.excel_file = base64.b64encode(output.read())
+    
+    def _compute_excel_filename(self):
+        for wizard in self:
+            wizard.excel_filename = 'trial_balance_%s_%s.xlsx' % (
+                wizard.date_from.strftime('%Y%m%d') if wizard.date_from else '',
+                wizard.date_to.strftime('%Y%m%d') if wizard.date_to else ''
+            )
+    
+    def print_report(self):
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/web/content/?model=custom_accounting.trial.balance.wizard&id=%s&field=excel_file&filename_field=excel_filename&download=true' % self.id,
+            'target': 'self',
+        }
+
+
+
+========== ./security/ir.model.access.csv ==========
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_custom_accounting_account_user,custom_accounting.account user,model_custom_accounting_account,base.group_user,1,1,1,1
+access_custom_accounting_journal_user,custom_accounting.journal user,model_custom_accounting_journal,base.group_user,1,1,1,1
+access_custom_accounting_move_user,custom_accounting.move user,model_custom_accounting_move,base.group_user,1,1,1,1
+access_custom_accounting_move_line_user,custom_accounting.move.line user,model_custom_accounting_move_line,base.group_user,1,1,1,1
+access_custom_accounting_asset_user,custom_accounting.asset user,model_custom_accounting_asset,base.group_user,1,1,1,1
+access_custom_accounting_asset_category_user,custom_accounting.asset.category user,model_custom_accounting_asset_category,base.group_user,1,1,1,1
+access_custom_accounting_asset_depreciation_line_user,custom_accounting.asset.depreciation.line user,model_custom_accounting_asset_depreciation_line,base.group_user,1,1,1,1
+access_custom_accounting_bank_transaction_user,custom_accounting.bank_transaction user,model_custom_accounting_bank_transaction,base.group_user,1,1,1,1
+access_custom_accounting_reconciliation_user,custom_accounting.reconciliation user,model_custom_accounting_reconciliation,base.group_user,1,1,1,1
+access_custom_accounting_reconciliation_line_user,custom_accounting.reconciliation.line user,model_custom_accounting_reconciliation_line,base.group_user,1,1,1,1
+access_custom_accounting_recurring_user,custom_accounting.recurring user,model_custom_accounting_recurring,base.group_user,1,1,1,1
+access_custom_accounting_recurring_line_user,custom_accounting.recurring.line user,model_custom_accounting_recurring_line,base.group_user,1,1,1,1
+access_custom_accounting_dashboard_user,custom_accounting.dashboard user,model_custom_accounting_dashboard,base.group_user,1,1,1,1
+access_custom_accounting_tax_user,custom_accounting.tax user,model_custom_accounting_tax,base.group_user,1,1,1,1
+access_custom_accounting_payment_user,custom_accounting.payment user,model_custom_accounting_payment,base.group_user,1,1,1,1
+access_custom_accounting_invoice_user,custom_accounting.invoice user,model_custom_accounting_invoice,base.group_user,1,1,1,1
+access_custom_accounting_invoice_line_user,custom_accounting.invoice.line user,model_custom_accounting_invoice_line,base.group_user,1,1,1,1
+access_custom_accounting_payment_term_user,custom_accounting.payment.term user,model_custom_accounting_payment_term,base.group_user,1,1,1,1
+access_custom_accounting_payment_term_line_user,custom_accounting.payment.term.line user,model_custom_accounting_payment_term_line,base.group_user,1,1,1,1
+access_custom_accounting_budget_user,custom_accounting.budget user,model_custom_accounting_budget,base.group_user,1,1,1,1
+access_custom_accounting_budget_line_user,custom_accounting.budget.line user,model_custom_accounting_budget_line,base.group_user,1,1,1,1
+access_custom_accounting_cost_center_user,custom_accounting.cost.center user,model_custom_accounting_cost_center,base.group_user,1,1,1,1
+access_custom_accounting_trial_balance_wizard_user,custom_accounting.trial.balance.wizard user,model_custom_accounting_trial_balance_wizard,base.group_user,1,0,1,0
+
+
+
+========== ./views/account_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Account Form View -->
+    <record id="view_account_form" model="ir.ui.view">
+        <field name="name">custom_accounting.account.form</field>
+        <field name="model">custom_accounting.account</field>
+        <field name="arch" type="xml">
+            <form string="Account">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="account_type"/>
+                            <field name="parent_id"/>
+                            <field name="currency_id"/>
+                        </group>
+                        <group>
+                            <field name="balance"/>
+                            <field name="debit"/>
+                            <field name="credit"/>
+                            <field name="reconcile"/>
+                            <field name="active"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Account Tree View -->
+    <record id="view_account_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.account.tree</field>
+        <field name="model">custom_accounting.account</field>
+        <field name="arch" type="xml">
+            <tree string="Accounts">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="account_type"/>
+                <field name="balance"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Account Action -->
+    <record id="action_custom_account" model="ir.actions.act_window">
+        <field name="name">Chart of Accounts</field>
+        <field name="res_model">custom_accounting.account</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/asset_category_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Category Views -->
+    <record id="view_custom_accounting_asset_category_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.category.tree</field>
+        <field name="model">custom_accounting.asset.category</field>
+        <field name="arch" type="xml">
+            <tree string="Asset Categories">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="description"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_custom_accounting_asset_category_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.category.form</field>
+        <field name="model">custom_accounting.asset.category</field>
+        <field name="arch" type="xml">
+            <form string="Asset Category">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="name"/>
+                        </group>
+                        <group>
+                            <field name="description"/>
+                        </group>
+                    </group>
+                    <group string="Default Accounts">
+                        <field name="default_asset_account_id"/>
+                        <field name="default_depreciation_account_id"/>
+                        <field name="default_expense_account_id"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Asset Category Action -->
+    <record id="action_custom_asset_category" model="ir.actions.act_window">
+        <field name="name">Asset Categories</field>
+        <field name="res_model">custom_accounting.asset.category</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create asset categories to organize your fixed assets.
+            </p>
+        </field>
+    </record>
+
+    <!-- Asset Category Menu Item -->
+    <menuitem id="menu_custom_asset_category"
+              name="Asset Categories"
+              parent="menu_accounting_transactions"
+              action="action_custom_asset_category"
+              sequence="85"/>
+</odoo>
+
+
+
+========== ./views/asset_depreciation_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Depreciation Line Views -->
+    <record id="view_custom_accounting_asset_depreciation_line_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.depreciation.line.tree</field>
+        <field name="model">custom_accounting.asset.depreciation.line</field>
+        <field name="arch" type="xml">
+            <tree string="Depreciation Lines">
+                <field name="date"/>
+                <field name="name"/>
+                <field name="amount"/>
+                <field name="state"/>
+                <field name="move_id" widget="many2one"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_custom_accounting_asset_depreciation_line_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.depreciation.line.form</field>
+        <field name="model">custom_accounting.asset.depreciation.line</field>
+        <field name="arch" type="xml">
+            <form string="Depreciation Line">
+                <sheet>
+                    <group>
+                        <field name="asset_id" readonly="1"/>
+                        <field name="date"/>
+                        <field name="name"/>
+                        <field name="amount"/>
+                        <field name="state"/>
+                    </group>
+                    <group>
+                        <field name="move_id" readonly="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_post" string="Post Depreciation" type="object" 
+                            class="btn-primary" />
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Depreciation Lines Action (from Asset form) -->
+    <record id="action_custom_asset_depreciation_line" model="ir.actions.act_window">
+        <field name="name">Depreciation Lines</field>
+        <field name="res_model">custom_accounting.asset.depreciation.line</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[]</field>
+        <field name="context">{'default_asset_id': active_id}</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/asset_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Assets Action -->
+    <record id="action_custom_asset" model="ir.actions.act_window">
+        <field name="name">Assets</field>
+        <field name="res_model">custom_accounting.asset</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Manage fixed assets and depreciation.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Assets Tree View -->
+    <record id="view_custom_accounting_asset_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.tree</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <tree string="Assets">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="category_id"/>
+                <field name="purchase_value"/>
+                <field name="current_value"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Assets Form View -->
+    <record id="view_custom_accounting_asset_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.form</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <form string="Asset">
+                <header>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="category_id"/>
+                        <field name="purchase_date"/>
+                        <field name="purchase_value"/>
+                        <field name="depreciation_method"/>
+                        <field name="useful_life"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
+
+
+
+========== ./views/budget_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Budget Form View -->
+    <record id="view_budget_form" model="ir.ui.view">
+        <field name="name">custom_accounting.budget.form</field>
+        <field name="model">custom_accounting.budget</field>
+        <field name="arch" type="xml">
+            <form string="Budget">
+                <header>
+                    <button name="action_submit" type="object" string="Submit" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_approve" type="object" string="Approve" class="btn-success"
+                            invisible="state != 'submitted'"/>
+                    <button name="action_reject" type="object" string="Reject" class="btn-danger"
+                            invisible="state != 'submitted'"/>
+                    <button name="action_close" type="object" string="Close" class="btn-default"
+                            invisible="state != 'approved'"/>
+                    <button name="action_reopen" type="object" string="Re-open" class="btn-info"
+                            invisible="state not in ['rejected', 'closed']"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,approved,rejected,closed"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="fiscal_year"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                        </group>
+                        <group>
+                            <field name="department_id"/>
+                            <field name="project_id"/>
+                            <field name="cost_center_id"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                    
+                    <field name="budget_line_ids">
+                        <tree editable="bottom">
+                            <field name="account_id"/>
+                            <field name="budget_amount"/>
+                            <field name="actual_amount"/>
+                            <field name="variance"/>
+                            <field name="status"/>
+                        </tree>
+                    </field>
+                    
+                    <group>
+                        <group>
+                            <field name="total_budget"/>
+                            <field name="total_actual"/>
+                            <field name="total_variance"/>
+                            <field name="variance_percentage"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Budget Tree View -->
+    <record id="view_budget_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.budget.tree</field>
+        <field name="model">custom_accounting.budget</field>
+        <field name="arch" type="xml">
+            <tree string="Budgets">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="fiscal_year"/>
+                <field name="total_budget"/>
+                <field name="total_actual"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Budget Action -->
+    <record id="action_custom_budget" model="ir.actions.act_window">
+        <field name="name">Budgets</field>
+        <field name="res_model">custom_accounting.budget</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/dashboard_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Dashboard Form View -->
+    <record id="view_dashboard_form" model="ir.ui.view">
+        <field name="name">custom_accounting.dashboard.form</field>
+        <field name="model">custom_accounting.dashboard</field>
+        <field name="arch" type="xml">
+            <form string="Accounting Dashboard">
+                <!-- REMOVED: button_box with action_refresh button -->
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="period" widget="radio"/>
+                        </group>
+                    </group>
+                    
+                    <group>
+                        <group>
+                            <field name="total_revenue" string="Total Revenue" readonly="1"/>
+                            <field name="total_expenses" string="Total Expenses" readonly="1"/>
+                            <field name="net_income" string="Net Income" readonly="1"/>
+                            <field name="cash_balance" string="Cash &amp; Bank Balance" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="accounts_receivable" string="Accounts Receivable" readonly="1"/>
+                            <field name="accounts_payable" string="Accounts Payable" readonly="1"/>
+                            <field name="total_assets" string="Total Assets" readonly="1"/>
+                            <field name="total_liabilities" string="Total Liabilities" readonly="1"/>
+                            <field name="equity" string="Equity" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Dashboard Action -->
+    <record id="action_accounting_dashboard" model="ir.actions.act_window">
+        <field name="name">Accounting Dashboard</field>
+        <field name="res_model">custom_accounting.dashboard</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/invoice_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Invoice Form -->
+    <record id="view_invoice_form" model="ir.ui.view">
+        <field name="name">invoice.form</field>
+        <field name="model">custom_accounting.invoice</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_post" type="object" string="Post"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="type"/>
+                        <field name="partner_id"/>
+                        <field name="invoice_date"/>
+                        <field name="journal_id"/>
+                    </group>
+                    <field name="invoice_line_ids">
+                        <tree>
+                            <field name="name"/>
+                            <field name="account_id"/>
+                            <field name="quantity"/>
+                            <field name="price_unit"/>
+                            <field name="subtotal"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    
+    <!-- Invoice Tree -->
+    <record id="view_invoice_tree" model="ir.ui.view">
+        <field name="name">invoice.tree</field>
+        <field name="model">custom_accounting.invoice</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="invoice_date"/>
+                <field name="partner_id"/>
+                <field name="amount_total"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Customer Invoice Action -->
+    <record id="action_customer_invoices" model="ir.actions.act_window">
+        <field name="name">Customer Invoices</field>
+        <field name="res_model">custom_accounting.invoice</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('type','=','out_invoice')]</field>
+        <field name="context">{'default_type':'out_invoice'}</field>
+    </record>
+    
+    <!-- Vendor Bill Action -->
+    <record id="action_vendor_bills" model="ir.actions.act_window">
+        <field name="name">Vendor Bills</field>
+        <field name="res_model">custom_accounting.invoice</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('type','=','in_invoice')]</field>
+        <field name="context">{'default_type':'in_invoice'}</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/journal_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Journal Form View -->
+    <record id="view_journal_form" model="ir.ui.view">
+        <field name="name">custom_accounting.journal.form</field>
+        <field name="model">custom_accounting.journal</field>
+        <field name="arch" type="xml">
+            <form string="Journal">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="type"/>
+                            <field name="default_account_id"/>
+                        </group>
+                        <group>
+                            <field name="profit_account_id"/>
+                            <field name="loss_account_id"/>
+                            <field name="active"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Journal Tree View -->
+    <record id="view_journal_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.journal.tree</field>
+        <field name="model">custom_accounting.journal</field>
+        <field name="arch" type="xml">
+            <tree string="Journals">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="type"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Journal Action -->
+    <record id="action_custom_journal" model="ir.actions.act_window">
+        <field name="name">Journals</field>
+        <field name="res_model">custom_accounting.journal</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/menu.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- ===== ROOT MENU ===== -->
+    <menuitem id="menu_custom_accounting_root"
+              name="Accounting"
+              sequence="10"
+              groups="base.group_user"/>
+    
+    <!-- ===== DASHBOARD ===== -->
+    <menuitem id="menu_accounting_dashboard"
+              name="Dashboard"
+              parent="menu_custom_accounting_root"
+              action="action_accounting_dashboard"
+              sequence="1"/>
+    
+    <!-- ===== TRANSACTIONS (EVERYTHING GOES HERE) ===== -->
+    <menuitem id="menu_accounting_transactions"
+              name="Transactions"
+              parent="menu_custom_accounting_root"
+              sequence="20"/>
+    
+    <!-- MASTER DATA ITEMS -->
+    <menuitem id="menu_custom_account"
+              name="Chart of Accounts"
+              parent="menu_accounting_transactions"
+              action="action_custom_account"
+              sequence="10"/>
+    
+    <menuitem id="menu_custom_tax"
+              name="Taxes"
+              parent="menu_accounting_transactions"
+              action="action_custom_tax"
+              sequence="20"/>
+    
+    <!-- CORE TRANSACTIONS -->
+    <menuitem id="menu_custom_move"
+              name="Journal Entries"
+              parent="menu_accounting_transactions"
+              action="action_custom_move"
+              sequence="30"/>
+    
+    <menuitem id="menu_customer_invoices"
+              name="Customer Invoices"
+              parent="menu_accounting_transactions"
+              action="action_customer_invoices"
+              sequence="40"/>
+    
+    <menuitem id="menu_vendor_bills"
+              name="Vendor Bills"
+              parent="menu_accounting_transactions"
+              action="action_vendor_bills"
+              sequence="50"/>
+    
+    <menuitem id="menu_custom_payments"
+              name="Payments"
+              parent="menu_accounting_transactions"
+              action="action_custom_payment"
+              sequence="60"/>
+    
+    <!-- RECURRING -->
+    <menuitem id="menu_custom_recurring"
+              name="Recurring Transactions"
+              parent="menu_accounting_transactions"
+              action="action_custom_recurring"
+              sequence="70"/>
+    
+    <!-- ASSETS -->
+    <menuitem id="menu_custom_assets"
+              name="Assets"
+              parent="menu_accounting_transactions"
+              action="action_custom_asset"
+              sequence="80"/>
+    
+    <!-- RECONCILIATION -->
+    <menuitem id="menu_custom_reconciliation"
+              name="Reconciliation"
+              parent="menu_accounting_transactions"
+              action="action_custom_reconciliation"
+              sequence="90"/>
+    
+    <!-- TRIAL BALANCE -->
+    <menuitem id="menu_custom_trial_balance"
+              name="Trial Balance"
+              parent="menu_accounting_transactions"
+              action="action_custom_trial_balance"
+              sequence="100"/>
+    
+    <!-- ===== MANAGEMENT ===== -->
+    <menuitem id="menu_accounting_management"
+              name="Management"
+              parent="menu_custom_accounting_root"
+              sequence="30"/>
+    
+    <menuitem id="menu_custom_budget"
+              name="Budgets"
+              parent="menu_accounting_management"
+              action="action_custom_budget"
+              sequence="10"/>
+</odoo>
+
+
+
+========== ./views/move_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Move Form View -->
+    <record id="view_move_form" model="ir.ui.view">
+        <field name="name">custom_accounting.move.form</field>
+        <field name="model">custom_accounting.move</field>
+        <field name="arch" type="xml">
+            <form string="Journal Entry">
+                <header>
+                    <button name="action_post" type="object" string="Post" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_cancel" type="object" string="Cancel" class="btn-secondary"
+                            invisible="state not in ['draft', 'posted']"/>
+                    <button name="action_draft" type="object" string="Set to Draft" class="btn-default"
+                            invisible="state != 'cancel'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,posted,cancel"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="date"/>
+                            <field name="journal_id"/>
+                            <field name="ref"/>
+                        </group>
+                        <group>
+                            <field name="amount_total"/>
+                            <field name="state"/>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                    
+                    <field name="line_ids">
+                        <tree editable="bottom">
+                            <field name="name"/>
+                            <field name="account_id"/>
+                            <field name="partner_id"/>
+                            <field name="debit"/>
+                            <field name="credit"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Move Tree View -->
+    <record id="view_move_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.move.tree</field>
+        <field name="model">custom_accounting.move</field>
+        <field name="arch" type="xml">
+            <tree string="Journal Entries">
+                <field name="name"/>
+                <field name="date"/>
+                <field name="journal_id"/>
+                <field name="ref"/>
+                <field name="amount_total"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Move Action -->
+    <record id="action_custom_move" model="ir.actions.act_window">
+        <field name="name">Journal Entries</field>
+        <field name="res_model">custom_accounting.move</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/payment_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Payment Form View -->
+    <record id="view_payment_form" model="ir.ui.view">
+        <field name="name">custom_accounting.payment.form</field>
+        <field name="model">custom_accounting.payment</field>
+        <field name="arch" type="xml">
+            <form string="Payment">
+                <header>
+                    <button name="action_post" type="object" string="Post" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,posted,cancelled"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="date"/>
+                            <field name="amount"/>
+                            <field name="payment_type"/>
+                        </group>
+                        <group>
+                            <field name="partner_id"/>
+                            <field name="journal_id"/>
+                            <field name="account_id"/>
+                            <field name="invoice_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Payment Tree View -->
+    <record id="view_payment_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.payment.tree</field>
+        <field name="model">custom_accounting.payment</field>
+        <field name="arch" type="xml">
+            <tree string="Payments">
+                <field name="name"/>
+                <field name="date"/>
+                <field name="partner_id"/>
+                <field name="amount"/>
+                <field name="payment_type"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Payment Action -->
+    <record id="action_custom_payment" model="ir.actions.act_window">
+        <field name="name">Payments</field>
+        <field name="res_model">custom_accounting.payment</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/reconciliation_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Reconciliation Action -->
+    <record id="action_custom_reconciliation" model="ir.actions.act_window">
+        <field name="name">Bank Reconciliation</field>
+        <field name="res_model">custom_accounting.reconciliation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Reconcile your bank transactions with accounting entries.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Reconciliation Tree View -->
+    <record id="view_custom_accounting_reconciliation_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.reconciliation.tree</field>
+        <field name="model">custom_accounting.reconciliation</field>
+        <field name="arch" type="xml">
+            <tree string="Reconciliations">
+                <field name="name"/>
+                <field name="date"/>
+                <field name="bank_account_id"/>
+                <field name="statement_balance"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Reconciliation Form View -->
+    <record id="view_custom_accounting_reconciliation_form" model="ir.ui.view">
+        <field name="name">custom_accounting.reconciliation.form</field>
+        <field name="model">custom_accounting.reconciliation</field>
+        <field name="arch" type="xml">
+            <form string="Bank Reconciliation">
+                <header>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="date"/>
+                        <field name="bank_account_id"/>
+                        <field name="statement_date"/>
+                        <field name="statement_balance"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
+
+
+
+========== ./views/recurring_transaction_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Recurring Transactions Action -->
+    <record id="action_custom_recurring" model="ir.actions.act_window">
+        <field name="name">Recurring Transactions</field>
+        <field name="res_model">custom_accounting.recurring</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create recurring transaction templates for automated journal entries.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Recurring Tree View -->
+    <record id="view_custom_accounting_recurring_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.tree</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <tree string="Recurring Transactions">
+                <field name="name"/>
+                <field name="journal_id"/>
+                <field name="interval_number"/>
+                <field name="interval_type"/>
+                <field name="next_date"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Recurring Form View -->
+    <record id="view_custom_accounting_recurring_form" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.form</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <form string="Recurring Transaction">
+                <header>
+                    <button name="action_generate_entries" type="object" string="Generate Entries" class="btn-primary"/>
+                    <field name="active" widget="boolean_button" options='{"terminology": "archive"}'/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="journal_id"/>
+                        <field name="interval_number"/>
+                        <field name="interval_type"/>
+                        <field name="next_date"/>
+                    </group>
+                    <notebook>
+                        <page string="Lines">
+                            <field name="line_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="account_id"/>
+                                    <field name="debit"/>
+                                    <field name="credit"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
+
+
+
+========== ./views/tax_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Tax Form View -->
+    <record id="view_tax_form" model="ir.ui.view">
+        <field name="name">custom_accounting.tax.form</field>
+        <field name="model">custom_accounting.tax</field>
+        <field name="arch" type="xml">
+            <form string="Tax">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="tax_type"/>
+                            <field name="rate"/>
+                        </group>
+                        <group>
+                            <field name="account_id"/>
+                            <field name="refund_account_id"/>
+                            <field name="active"/>
+                            <field name="state"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Tax Tree View -->
+    <record id="view_tax_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.tax.tree</field>
+        <field name="model">custom_accounting.tax</field>
+        <field name="arch" type="xml">
+            <tree string="Taxes">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="tax_type"/>
+                <field name="rate"/>
+                <field name="account_id"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Tax Action -->
+    <record id="action_custom_tax" model="ir.actions.act_window">
+        <field name="name">Taxes</field>
+        <field name="res_model">custom_accounting.tax</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
+
+
+
+========== ./views/trial_balance_views.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Trial Balance Action (Report) -->
+    <record id="action_custom_trial_balance" model="ir.actions.act_window">
+        <field name="name">Trial Balance</field>
+        <field name="res_model">custom_accounting.trial.balance.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="type">ir.actions.act_window</field>
+    </record>
+    
+    <!-- Trial Balance Wizard Form -->
+    <record id="view_custom_trial_balance_wizard_form" model="ir.ui.view">
+        <field name="name">trial.balance.wizard.form</field>
+        <field name="model">custom_accounting.trial.balance.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Trial Balance Report">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                    <field name="target_move" widget="radio"/>
+                </group>
+                <footer>
+                    <button name="print_report" string="Print" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
+
+
+

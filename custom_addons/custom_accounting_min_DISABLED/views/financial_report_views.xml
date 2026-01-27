@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Financial Report Wizard Form -->
+    <record id="view_financial_report_wizard_form" model="ir.ui.view">
+        <field name="name">financial.report.wizard.form</field>
+        <field name="model">custom_accounting.financial.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Financial Report">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="report_type" widget="radio" options="{'horizontal': true}"/>
+                        </group>
+                        <group>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="compare_with_previous"/>
+                            <field name="previous_date_from" attrs="{'invisible': [('compare_with_previous', '=', False)]}"/>
+                            <field name="previous_date_to" attrs="{'invisible': [('compare_with_previous', '=', False)]}"/>
+                        </group>
+                        <group>
+                            <field name="company_id"/>
+                            <field name="currency_id"/>
+                            <field name="include_unposted"/>
+                            <field name="group_by_period"/>
+                        </group>
+                    </group>
+                    
+                    <div t-if="result_html" class="mt-4">
+                        <field name="result_html" widget="html" nolabel="1"/>
+                    </div>
+                    
+                    <div t-if="chart_data" class="mt-4">
+                        <div class="o_chart_container">
+                            <canvas id="financialChart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                </sheet>
+                <footer>
+                    <button name="print_report" string="Print PDF" type="object" class="btn-primary"/>
+                    <button name="export_excel" string="Export Excel" type="object" class="btn-secondary"/>
+                    <button string="Close" class="btn-default" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Financial Report Action -->
+    <record id="action_financial_report" model="ir.actions.act_window">
+        <field name="name">Financial Reports</field>
+        <field name="res_model">custom_accounting.financial.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'dialog_size': 'large'}</field>
+    </record>
+
+    <!-- Menu Items for Financial Reports -->
+    <menuitem id="menu_financial_reports" 
+              name="Financial Reports"
+              parent="menu_accounting_transactions"
+              sequence="110"/>
+    
+    <menuitem id="menu_report_profit_loss"
+              name="Profit &amp; Loss"
+              parent="menu_financial_reports"
+              action="action_financial_report"
+              context="{'default_report_type': 'profit_loss'}"
+              sequence="10"/>
+    
+    <menuitem id="menu_report_balance_sheet"
+              name="Balance Sheet"
+              parent="menu_financial_reports"
+              action="action_financial_report"
+              context="{'default_report_type': 'balance_sheet'}"
+              sequence="20"/>
+    
+    <menuitem id="menu_report_cash_flow"
+              name="Cash Flow"
+              parent="menu_financial_reports"
+              action="action_financial_report"
+              context="{'default_report_type': 'cash_flow'}"
+              sequence="30"/>
+    
+    <menuitem id="menu_report_aged_receivables"
+              name="Aged Receivables"
+              parent="menu_financial_reports"
+              action="action_financial_report"
+              context="{'default_report_type': 'aged_receivables'}"
+              sequence="40"/>
+    
+    <menuitem id="menu_report_aged_payables"
+              name="Aged Payables"
+              parent="menu_financial_reports"
+              action="action_financial_report"
+              context="{'default_report_type': 'aged_payables'}"
+              sequence="50"/>
+
+    <!-- JavaScript for Charts -->
+    <template id="financial_report_charts" inherit_id="web.assets_backend">
+        <xpath expr="." position="inside">
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                odoo.define('custom_accounting.financial_reports', function (require) {
+                    "use strict";
+                    
+                    var FormController = require('web.FormController');
+                    
+                    FormController.include({
+                        /**
+                         * Render chart when form is loaded
+                         */
+                        _onLoad: function () {
+                            this._super.apply(this, arguments);
+                            this.renderChart();
+                        },
+                        
+                        /**
+                         * Render chart from chart_data field
+                         */
+                        renderChart: function () {
+                            var self = this;
+                            var $chartData = this.$el.find('input[name="chart_data"]');
+                            
+                            if ($chartData.length && $chartData.val()) {
+                                var chartData = JSON.parse($chartData.val());
+                                var ctx = document.getElementById('financialChart').getContext('2d');
+                                
+                                new Chart(ctx, {
+                                    type: 'bar',
+                                    data: chartData,
+                                    options: {
+                                        responsive: true,
+                                        plugins: {
+                                            legend: {
+                                                position: 'top',
+                                            },
+                                            title: {
+                                                display: true,
+                                                text: 'Financial Overview'
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                });
+            </script>
+            <style>
+                .o_chart_container {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                
+                .financial-report table {
+                    font-size: 14px;
+                }
+                
+                .financial-report h2 {
+                    color: #333;
+                    border-bottom: 2px solid #007bff;
+                    padding-bottom: 10px;
+                    margin-bottom: 20px;
+                }
+                
+                .financial-report h3 {
+                    color: #555;
+                    margin-top: 20px;
+                    margin-bottom: 15px;
+                }
+                
+                .table-active {
+                    background-color: rgba(0, 123, 255, 0.1) !important;
+                }
+                
+                .table-success {
+                    background-color: rgba(40, 167, 69, 0.1) !important;
+                }
+                
+                .table-info {
+                    background-color: rgba(23, 162, 184, 0.1) !important;
+                }
+                
+                .table-primary {
+                    background-color: rgba(0, 123, 255, 0.15) !important;
+                }
+            </style>
+        </xpath>
+    </template>
+</odoo>

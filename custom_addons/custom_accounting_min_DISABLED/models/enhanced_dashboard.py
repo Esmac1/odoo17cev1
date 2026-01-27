@@ -1,0 +1,214 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _, tools
+from datetime import date, timedelta
+from collections import defaultdict
+
+class EnhancedDashboard(models.Model):
+    _name = 'custom_accounting.enhanced.dashboard'
+    _description = 'Enhanced Accounting Dashboard'
+    _auto = False  # This is a SQL view
+    
+    # ========== KPI FIELDS ==========
+    # Financial Health
+    current_ratio = fields.Float(string='Current Ratio', digits=(12, 2))
+    quick_ratio = fields.Float(string='Quick Ratio', digits=(12, 2))
+    debt_to_equity = fields.Float(string='Debt to Equity', digits=(12, 2))
+    working_capital = fields.Float(string='Working Capital', digits=(16, 2))
+    
+    # Profitability
+    gross_profit_margin = fields.Float(string='Gross Profit Margin %', digits=(12, 2))
+    net_profit_margin = fields.Float(string='Net Profit Margin %', digits=(12, 2))
+    roi = fields.Float(string='Return on Investment %', digits=(12, 2))
+    ebitda = fields.Float(string='EBITDA', digits=(16, 2))
+    
+    # Liquidity
+    cash_balance = fields.Float(string='Cash Balance', digits=(16, 2))
+    cash_balance_foreign = fields.Float(string='Cash (Foreign)', digits=(16, 2))
+    monthly_cash_flow = fields.Float(string='Monthly Cash Flow', digits=(16, 2))
+    cash_runway_months = fields.Float(string='Cash Runway (Months)', digits=(12, 1))
+    
+    # Receivables/Payables
+    ar_balance = fields.Float(string='Accounts Receivable', digits=(16, 2))
+    ap_balance = fields.Float(string='Accounts Payable', digits=(16, 2))
+    ar_aging_30 = fields.Float(string='AR 1-30 Days', digits=(16, 2))
+    ar_aging_60 = fields.Float(string='AR 31-60 Days', digits=(16, 2))
+    ar_aging_90 = fields.Float(string='AR 61-90 Days', digits=(16, 2))
+    ar_aging_over90 = fields.Float(string='AR 90+ Days', digits=(16, 2))
+    
+    # Multi-Currency
+    foreign_exposure = fields.Float(string='Foreign Exposure', digits=(16, 2))
+    currency_gains_losses = fields.Float(string='Currency Gains/Losses', digits=(16, 2))
+    top_currencies = fields.Char(string='Top Currencies')
+    
+    # Performance
+    revenue_ytd = fields.Float(string='Revenue YTD', digits=(16, 2))
+    revenue_mtd = fields.Float(string='Revenue MTD', digits=(16, 2))
+    expenses_ytd = fields.Float(string='Expenses YTD', digits=(16, 2))
+    expenses_mtd = fields.Float(string='Expenses MTD', digits=(16, 2))
+    profit_ytd = fields.Float(string='Profit YTD', digits=(16, 2))
+    profit_mtd = fields.Float(string='Profit MTD', digits=(16, 2))
+    
+    # Trends
+    revenue_trend = fields.Selection([
+        ('up', 'Increasing'),
+        ('down', 'Decreasing'),
+        ('stable', 'Stable'),
+    ], string='Revenue Trend')
+    expense_trend = fields.Selection([
+        ('up', 'Increasing'),
+        ('down', 'Decreasing'),
+        ('stable', 'Stable'),
+    ], string='Expense Trend')
+    
+    # ========== COMPUTED FIELDS ==========
+    @api.model
+    def _compute_kpis(self):
+        """Compute all KPIs for the dashboard"""
+        company = self.env.company
+        today = date.today()
+        year_start = date(today.year, 1, 1)
+        month_start = date(today.year, today.month, 1)
+        
+        kpis = {
+            # Initialize with zeros
+            'current_ratio': 0.0,
+            'quick_ratio': 0.0,
+            'debt_to_equity': 0.0,
+            'working_capital': 0.0,
+            'gross_profit_margin': 0.0,
+            'net_profit_margin': 0.0,
+            'roi': 0.0,
+            'ebitda': 0.0,
+            'cash_balance': 0.0,
+            'cash_balance_foreign': 0.0,
+            'monthly_cash_flow': 0.0,
+            'cash_runway_months': 0.0,
+            'ar_balance': 0.0,
+            'ap_balance': 0.0,
+            'ar_aging_30': 0.0,
+            'ar_aging_60': 0.0,
+            'ar_aging_90': 0.0,
+            'ar_aging_over90': 0.0,
+            'foreign_exposure': 0.0,
+            'currency_gains_losses': 0.0,
+            'top_currencies': '',
+            'revenue_ytd': 0.0,
+            'revenue_mtd': 0.0,
+            'expenses_ytd': 0.0,
+            'expenses_mtd': 0.0,
+            'profit_ytd': 0.0,
+            'profit_mtd': 0.0,
+            'revenue_trend': 'stable',
+            'expense_trend': 'stable',
+        }
+        
+        # Get account balances (simplified - in real system, use actual transactions)
+        accounts = self.env['custom_accounting.account'].search([
+            ('company_id', '=', company.id),
+            ('active', '=', True),
+        ])
+        
+        # Calculate financial ratios
+        current_assets = sum(a.balance for a in accounts.filtered(
+            lambda x: x.type in ['asset', 'bank', 'cash', 'receivable']
+        ))
+        current_liabilities = sum(a.balance for a in accounts.filtered(
+            lambda x: x.type in ['liability', 'payable']
+        ))
+        total_assets = sum(a.balance for a in accounts.filtered(
+            lambda x: x.type in ['asset', 'bank', 'cash']
+        ))
+        total_liabilities = sum(a.balance for a in accounts.filtered(
+            lambda x: x.type in ['liability', 'payable']
+        ))
+        equity = sum(a.balance for a in accounts.filtered(
+            lambda x: x.type == 'equity'
+        ))
+        
+        # Financial Health KPIs
+        if current_liabilities != 0:
+            kpis['current_ratio'] = current_assets / current_liabilities
+            kpis['quick_ratio'] = (current_assets) / current_liabilities  # Simplified
+        
+        if equity != 0:
+            kpis['debt_to_equity'] = total_liabilities / equity
+        
+        kpis['working_capital'] = current_assets - current_liabilities
+        
+        # Profitability (simplified)
+        revenue = sum(a.balance for a in accounts.filtered(lambda x: x.type == 'income'))
+        expenses = sum(a.balance for a in accounts.filtered(lambda x: x.type == 'expense'))
+        profit = revenue - expenses
+        
+        if revenue != 0:
+            kpis['gross_profit_margin'] = (profit / revenue) * 100
+            kpis['net_profit_margin'] = (profit / revenue) * 100
+        
+        # Liquidity
+        cash_accounts = accounts.filtered(lambda x: x.type in ['bank', 'cash'])
+        kpis['cash_balance'] = sum(a.balance for a in cash_accounts)
+        kpis['cash_balance_foreign'] = sum(a.foreign_balance for a in cash_accounts)
+        
+        # Multi-Currency exposure
+        foreign_accounts = accounts.filtered(lambda x: x.currency_id and x.currency_id != company.currency_id)
+        kpis['foreign_exposure'] = sum(a.foreign_balance for a in foreign_accounts)
+        
+        # Get top 3 currencies
+        currency_balances = defaultdict(float)
+        for account in foreign_accounts:
+            if account.currency_id:
+                currency_balances[account.currency_id.name] += account.foreign_balance
+        
+        top_currencies = sorted(currency_balances.items(), key=lambda x: abs(x[1] or 0), reverse=True)[:3]
+        kpis["top_currencies"] = ", ".join([f"{curr}: {bal:,.2f}" for curr, bal in top_currencies if bal is not None])
+        top_currencies = sorted(currency_balances.items(), key=lambda x: abs(x[1] or 0), reverse=True)[:3]
+        kpis["top_currencies"] = ", ".join([f"{curr}: {bal:,.2f}" for curr, bal in top_currencies if bal is not None])
+        
+        # Performance metrics
+        kpis['revenue_ytd'] = revenue
+        kpis['revenue_mtd'] = revenue  # Simplified - should be month-to-date
+        kpis['expenses_ytd'] = expenses
+        kpis['expenses_mtd'] = expenses  # Simplified
+        kpis['profit_ytd'] = profit
+        kpis['profit_mtd'] = profit  # Simplified
+        
+        return kpis
+    
+    def init(self):
+        """Initialize the SQL view for the dashboard"""
+        tools.drop_view_if_exists(self.env.cr, self._table)
+        self.env.cr.execute("""
+            CREATE OR REPLACE VIEW %s AS (
+                SELECT 
+                    row_number() OVER () as id,
+                    0.0 as current_ratio,
+                    0.0 as quick_ratio,
+                    0.0 as debt_to_equity,
+                    0.0 as working_capital,
+                    0.0 as gross_profit_margin,
+                    0.0 as net_profit_margin,
+                    0.0 as roi,
+                    0.0 as ebitda,
+                    0.0 as cash_balance,
+                    0.0 as cash_balance_foreign,
+                    0.0 as monthly_cash_flow,
+                    0.0 as cash_runway_months,
+                    0.0 as ar_balance,
+                    0.0 as ap_balance,
+                    0.0 as ar_aging_30,
+                    0.0 as ar_aging_60,
+                    0.0 as ar_aging_90,
+                    0.0 as ar_aging_over90,
+                    0.0 as foreign_exposure,
+                    0.0 as currency_gains_losses,
+                    '' as top_currencies,
+                    0.0 as revenue_ytd,
+                    0.0 as revenue_mtd,
+                    0.0 as expenses_ytd,
+                    0.0 as expenses_mtd,
+                    0.0 as profit_ytd,
+                    0.0 as profit_mtd,
+                    'stable' as revenue_trend,
+                    'stable' as expense_trend
+            )
+        """ % self._table)

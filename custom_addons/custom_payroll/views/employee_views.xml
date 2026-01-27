@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Employee Tree View -->
+    <record id="view_employee_tree" model="ir.ui.view">
+        <field name="name">custom_payroll.employee.tree</field>
+        <field name="model">custom_payroll.employee</field>
+        <field name="arch" type="xml">
+            <tree string="Employees">
+                <field name="name"/>
+                <field name="payroll_number"/>
+                <field name="employment_date"/>
+                <field name="basic_salary"/>
+                <field name="payroll_active" widget="boolean"/>
+                <field name="active_contract_id" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Employee Form View -->
+    <record id="view_employee_form" model="ir.ui.view">
+        <field name="name">custom_payroll.employee.form</field>
+        <field name="model">custom_payroll.employee</field>
+        <field name="arch" type="xml">
+            <form string="Employee">
+                <header>
+                    <button name="action_view_contracts" string="Contracts" type="object" class="oe_stat_button"/>
+                    <button name="action_view_payslips" string="Payslips" type="object" class="oe_stat_button"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Employee Name"/>
+                        </h1>
+                        <h2>
+                            <field name="payroll_number"/>
+                        </h2>
+                    </div>
+                    <group>
+                        <group string="Basic Information">
+                            <field name="employment_date"/>
+                            <field name="department_id"/>
+                            <field name="job_id"/>
+                            <field name="payroll_active"/>
+                        </group>
+                        <group string="Salary Information">
+                            <field name="basic_salary"/>
+                            <field name="housing_allowance"/>
+                            <field name="transport_allowance"/>
+                            <field name="medical_allowance"/>
+                        </group>
+                    </group>
+                    <group string="Nigerian Details">
+                        <field name="kra_pin"/>
+                        <field name="nssf_number"/>
+                        <field name="nhif_number"/>
+                    </group>
+                    <group string="Totals">
+                        <field name="total_earnings" readonly="1"/>
+                        <field name="total_deductions" readonly="1"/>
+                        <field name="net_salary" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Contracts">
+                            <field name="contract_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="date_start"/>
+                                    <field name="date_end"/>
+                                    <field name="wage"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Payslips">
+                            <field name="payslip_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="date_from"/>
+                                    <field name="date_to"/>
+                                    <field name="gross_salary"/>
+                                    <field name="net_salary"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Loans">
+                            <field name="loan_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="loan_type"/>
+                                    <field name="amount"/>
+                                    <field name="balance"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Employee Search View -->
+    <record id="view_employee_search" model="ir.ui.view">
+        <field name="name">custom_payroll.employee.search</field>
+        <field name="model">custom_payroll.employee</field>
+        <field name="arch" type="xml">
+            <search string="Search Employees">
+                <field name="name"/>
+                <field name="payroll_number"/>
+                <field name="department_id"/>
+                <filter string="Active" name="active" domain="[('payroll_active','=',True)]"/>
+                <filter string="Inactive" name="inactive" domain="[('payroll_active','=',False)]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Department" name="group_department" context="{'group_by': 'department_id'}"/>
+                    <filter string="Job Position" name="group_job" context="{'group_by': 'job_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Employee Action -->
+    <record id="action_employee" model="ir.actions.act_window">
+        <field name="name">Employees</field>
+        <field name="res_model">custom_payroll.employee</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_employee_search"/>
+    </record>
+
+    <!-- Employee Menu -->
+    <menuitem id="menu_employee" name="Employees" parent="menu_payroll_root" action="action_employee" sequence="10"/>
+</odoo>

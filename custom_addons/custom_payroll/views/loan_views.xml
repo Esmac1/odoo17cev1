@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Loan Tree View -->
+    <record id="view_loan_tree" model="ir.ui.view">
+        <field name="name">custom_payroll.loan.tree</field>
+        <field name="model">custom_payroll.loan</field>
+        <field name="arch" type="xml">
+            <tree string="Loans">
+                <field name="name"/>
+                <field name="employee_id"/>
+                <field name="loan_type"/>
+                <field name="date"/>
+                <field name="amount"/>
+                <field name="balance"/>
+                <field name="state" widget="badge" decoration-success="state=='paid'" decoration-warning="state in ['approved','disbursed']" decoration-danger="state=='overdue'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Loan Form View -->
+    <record id="view_loan_form" model="ir.ui.view">
+        <field name="name">custom_payroll.loan.form</field>
+        <field name="model">custom_payroll.loan</field>
+        <field name="arch" type="xml">
+            <form string="Employee Loan">
+                <header>
+                    <button name="action_approve" string="Approve" type="object" class="btn-primary" states="draft"/>
+                    <button name="action_disburse" string="Disburse" type="object" states="approved"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,approved,disbursed,running,paid"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Loan Reference"/>
+                        </h1>
+                        <h2>
+                            <field name="employee_id" widget="many2one" options="{'no_create': True}"/>
+                        </h2>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="loan_type"/>
+                            <field name="date"/>
+                            <field name="amount"/>
+                            <field name="interest_rate"/>
+                            <field name="tenure_months"/>
+                        </group>
+                        <group>
+                            <field name="start_date"/>
+                            <field name="end_date" readonly="1"/>
+                            <field name="monthly_repayment" readonly="1"/>
+                            <field name="total_amount" readonly="1"/>
+                            <field name="total_interest" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Status">
+                        <field name="state"/>
+                        <field name="disbursement_date" readonly="1"/>
+                        <field name="disbursement_ref"/>
+                    </group>
+                    <group string="Amounts">
+                        <field name="amount_paid" readonly="1"/>
+                        <field name="amount_due" readonly="1"/>
+                        <field name="balance" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Installments">
+                            <field name="installment_ids" context="{'default_loan_id': active_id}">
+                                <tree editable="bottom">
+                                    <field name="sequence"/>
+                                    <field name="due_date"/>
+                                    <field name="amount"/>
+                                    <field name="principal"/>
+                                    <field name="interest"/>
+                                    <field name="state" widget="badge"/>
+                                    <field name="payment_date"/>
+                                    <field name="days_overdue"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="notes" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Loan Search View -->
+    <record id="view_loan_search" model="ir.ui.view">
+        <field name="name">custom_payroll.loan.search</field>
+        <field name="model">custom_payroll.loan</field>
+        <field name="arch" type="xml">
+            <search string="Search Loans">
+                <field name="employee_id"/>
+                <field name="loan_type"/>
+                <field name="state"/>
+                <filter string="Active Loans" name="active" domain="[('state','in',['approved','disbursed','running'])]"/>
+                <filter string="Overdue" name="overdue" domain="[('balance','>',0),('end_date','&lt;',context_today())]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Employee" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="Loan Type" name="group_type" context="{'group_by': 'loan_type'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Loan Action -->
+    <record id="action_loan" model="ir.actions.act_window">
+        <field name="name">Loans</field>
+        <field name="res_model">custom_payroll.loan</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_loan_search"/>
+        <field name="context">{'default_state': 'draft'}</field>
+    </record>
+
+    <!-- Loan Menu -->
+    <menuitem id="menu_loan" name="Loans" parent="menu_payroll_root" action="action_loan" sequence="50"/>
+</odoo>

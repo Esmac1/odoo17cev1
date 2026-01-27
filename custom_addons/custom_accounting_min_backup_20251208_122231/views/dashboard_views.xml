@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- DASHBOARD VIEW -->
+    <record id="view_accounting_dashboard_form" model="ir.ui.view">
+        <field name="name">custom_accounting.dashboard.form</field>
+        <field name="model">custom_accounting.dashboard</field>
+        <field name="type">form</field>
+        <field name="arch" type="xml">
+            <form string="Accounting Dashboard">
+                <!-- Hidden fields that are referenced in modifiers -->
+                <field name="financial_health" invisible="1"/>
+                <field name="profit_margin" invisible="1"/>
+                <field name="is_balanced" invisible="1"/>
+                <field name="cash_position" invisible="1"/>
+                
+                <sheet>
+                    <!-- Period Selection -->
+                    <div class="row mb-4">
+                        <div class="col-6">
+                            <label for="period" string="Reporting Period"/>
+                            <field name="period" widget="radio" options="{'horizontal': true}"/>
+                        </div>
+                        <div class="col-6">
+                            <div class="row">
+                                <div class="col-6">
+                                    <field name="date_from" invisible="period != 'custom'" string="From"/>
+                                </div>
+                                <div class="col-6">
+                                    <field name="date_to" invisible="period != 'custom'" string="To"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Company Selection -->
+                    <field name="company_id" groups="base.group_multi_company" options="{'no_create': True}"/>
+
+                    <!-- Row 1 -->
+                    <div class="row">
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-success text-white h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">REVENUE</h5>
+                                    <h3 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="total_revenue" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h3>
+                                    <button name="action_view_revenue" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-danger text-white h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">EXPENSES</h5>
+                                    <h3 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="total_expenses" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h3>
+                                    <button name="action_view_expenses" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-primary text-white h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">NET INCOME</h5>
+                                    <h3 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="net_income" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h3>
+                                    <p class="card-text mb-0 mt-auto">
+                                        <i>Revenue - Expenses</i>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-info text-white h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">CASH BALANCE</h5>
+                                    <h3 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="cash_balance" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h3>
+                                    <button name="action_view_cash" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 2 -->
+                    <div class="row">
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-warning text-dark h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">ACCOUNTS RECEIVABLE</h5>
+                                    <h4 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="accounts_receivable" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h4>
+                                    <button name="action_view_receivables" type="object" string="View Details" class="btn btn-dark btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card bg-secondary text-white h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">ACCOUNTS PAYABLE</h5>
+                                    <h4 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="accounts_payable" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h4>
+                                    <button name="action_view_payables" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card h-100" style="background-color:#6f42c1;color:white;">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">TOTAL ASSETS</h5>
+                                    <h4 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="total_assets" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h4>
+                                    <button name="action_view_assets" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-4">
+                            <div class="card h-100" style="background-color:#fd7e14;color:white;">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">TOTAL LIABILITIES</h5>
+                                    <h4 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="total_liabilities" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h4>
+                                    <button name="action_view_liabilities" type="object" string="View Details" class="btn btn-light btn-sm mt-auto"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Equity + Ratios -->
+                    <div class="row">
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="card h-100" style="background-color:#20c997;color:white;">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <h5 class="card-title">EQUITY</h5>
+                                    <h4 class="card-text mt-2 mb-3 flex-grow-1">
+                                        <field name="equity" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                                    </h4>
+                                    <p class="card-text mb-0 mt-auto">
+                                        <i>Assets - Liabilities</i>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-8 col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title text-dark mb-3">FINANCIAL RATIOS</h5>
+                                    <div class="row text-center">
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Current Ratio</strong><br/>
+                                            <h4><field name="current_ratio"/> : 1</h4>
+                                            <small class="text-muted">Assets ÷ Liabilities</small>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Quick Ratio</strong><br/>
+                                            <h4><field name="quick_ratio"/> : 1</h4>
+                                            <small class="text-muted">(Cash + Receivables) ÷ Payables</small>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Debt Ratio</strong><br/>
+                                            <h4><field name="debt_ratio"/>%</h4>
+                                            <small class="text-muted">Liabilities ÷ Assets</small>
+                                        </div>
+                                    </div>
+                                    <hr/>
+                                    <div class="row text-center">
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Profit Margin</strong><br/>
+                                            <!-- Positive profit margin -->
+                                            <h4 class="text-success" invisible="profit_margin &lt; 0">
+                                                <field name="profit_margin"/>%
+                                            </h4>
+                                            <!-- Negative profit margin -->
+                                            <h4 class="text-danger" invisible="profit_margin &gt;= 0">
+                                                <field name="profit_margin"/>%
+                                            </h4>
+                                            <small class="text-muted">Net Income ÷ Revenue</small>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Return on Equity</strong><br/>
+                                            <h4><field name="return_on_equity"/>%</h4>
+                                            <small class="text-muted">Net Income ÷ Equity</small>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <strong>Financial Health</strong><br/>
+                                            <!-- Healthy -->
+                                            <h4 class="text-success" invisible="financial_health != 'healthy'">Healthy</h4>
+                                            <!-- Warning -->
+                                            <h4 class="text-warning" invisible="financial_health != 'warning'">Warning</h4>
+                                            <!-- Critical -->
+                                            <h4 class="text-danger" invisible="financial_health != 'critical'">Critical</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Summary -->
+                    <div class="row mt-2">
+                        <div class="col-lg-4 col-md-4 mb-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <h6 class="card-title">Expense Ratio</h6>
+                                    <h4 class="card-text text-info flex-grow-1">
+                                        <field name="expense_ratio"/>%
+                                    </h4>
+                                    <small class="text-muted mt-auto">Expenses ÷ Revenue</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 col-md-4 mb-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <h6 class="card-title">Balance Check</h6>
+                                    <!-- Balanced -->
+                                    <h4 class="card-text text-success flex-grow-1" invisible="not is_balanced">✓ Balanced</h4>
+                                    <!-- Unbalanced -->
+                                    <h4 class="card-text text-danger flex-grow-1" invisible="is_balanced">✗ Unbalanced</h4>
+                                    <small class="text-muted mt-auto">Assets = Liabilities + Equity</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 col-md-4 mb-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <h6 class="card-title">Cash Position</h6>
+                                    <!-- Positive -->
+                                    <h4 class="card-text text-success flex-grow-1" invisible="cash_position != 'positive'">✓ Positive</h4>
+                                    <!-- Negative -->
+                                    <h4 class="card-text text-danger flex-grow-1" invisible="cash_position != 'negative'">✗ Negative</h4>
+                                    <small class="text-muted mt-auto">Cash Balance</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Dashboard Action -->
+    <record id="action_accounting_dashboard" model="ir.actions.act_window">
+        <field name="name">Accounting Dashboard</field>
+        <field name="res_model">custom_accounting.dashboard</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

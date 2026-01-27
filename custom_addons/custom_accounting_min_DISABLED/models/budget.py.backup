@@ -1,0 +1,275 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError, UserError
+from datetime import datetime
+
+class CustomBudget(models.Model):
+    _name = 'custom_accounting.budget'
+    _description = 'Budget Management System'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    
+    name = fields.Char(string='Budget Name', required=True)
+    code = fields.Char(string='Budget Code', required=True, size=20)
+    fiscal_year = fields.Char(string='Fiscal Year', required=True, 
+                             default=lambda self: str(datetime.now().year))
+    
+    date_from = fields.Date(string='From Date', required=True, 
+                           default=lambda self: datetime.now().replace(month=1, day=1).date())
+    date_to = fields.Date(string='To Date', required=True, 
+                         default=lambda self: datetime.now().replace(month=12, day=31).date())
+    
+    # Budget Scope
+    department_id = fields.Many2one('hr.department', string='Department')
+    project_id = fields.Many2one('project.project', string='Project')
+    cost_center_id = fields.Many2one('custom_accounting.cost.center', string='Cost Center')
+    
+    # Budget Lines
+    budget_line_ids = fields.One2many('custom_accounting.budget.line', 'budget_id', 
+                                      string='Budget Lines')
+    
+    # State
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted for Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('closed', 'Closed'),
+    ], string='Status', default='draft', tracking=True)
+    
+    # Totals
+    total_budget = fields.Float(string='Total Budget', compute='_compute_totals', 
+                               store=True, digits=(16, 2))
+    total_actual = fields.Float(string='Total Actual', compute='_compute_totals', 
+                               store=True, digits=(16, 2))
+    total_variance = fields.Float(string='Total Variance', compute='_compute_totals', 
+                                 store=True, digits=(16, 2))
+    variance_percentage = fields.Float(string='Variance %', compute='_compute_totals', 
+                                      store=True, digits=(16, 2))
+    
+    # Approval
+    approved_by = fields.Many2one('res.users', string='Approved By', readonly=True)
+    approved_date = fields.Datetime(string='Approved Date', readonly=True)
+    submitted_by = fields.Many2one('res.users', string='Submitted By', readonly=True)
+    submitted_date = fields.Datetime(string='Submitted Date', readonly=True)
+    
+    # Company
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company, required=True)
+    
+    # Description
+    description = fields.Text(string='Description')
+    notes = fields.Text(string='Internal Notes')
+    
+    _sql_constraints = [
+        ('code_company_uniq', 'unique(code, company_id, fiscal_year)', 
+         'Budget code must be unique per company and fiscal year!'),
+    ]
+    
+    @api.depends('budget_line_ids.budget_amount', 'budget_line_ids.actual_amount')
+    def _compute_totals(self):
+        for budget in self:
+            budget.total_budget = sum(budget.budget_line_ids.mapped('budget_amount'))
+            budget.total_actual = sum(budget.budget_line_ids.mapped('actual_amount'))
+            budget.total_variance = budget.total_budget - budget.total_actual
+            
+            if budget.total_budget != 0:
+                budget.variance_percentage = (budget.total_variance / budget.total_budget) * 100
+            else:
+                budget.variance_percentage = 0
+    
+    def action_submit(self):
+        """Submit budget for approval"""
+        for budget in self:
+            if budget.state != 'draft':
+                raise UserError(_("Only draft budgets can be submitted!"))
+            
+            if not budget.budget_line_ids:
+                raise UserError(_("Please add budget lines before submitting!"))
+            
+            budget.state = 'submitted'
+            budget.submitted_by = self.env.user
+            budget.submitted_date = fields.Datetime.now()
+    
+    def action_approve(self):
+        """Approve budget"""
+        for budget in self:
+            if budget.state != 'submitted':
+                raise UserError(_("Only submitted budgets can be approved!"))
+            
+            budget.state = 'approved'
+            budget.approved_by = self.env.user
+            budget.approved_date = fields.Datetime.now()
+    
+    def action_reject(self):
+        """Reject budget"""
+        for budget in self:
+            if budget.state != 'submitted':
+                raise UserError(_("Only submitted budgets can be rejected!"))
+            
+            budget.state = 'rejected'
+    
+    def action_close(self):
+        """Close budget"""
+        for budget in self:
+            if budget.state != 'approved':
+                raise UserError(_("Only approved budgets can be closed!"))
+            
+            budget.state = 'closed'
+    
+    def action_reopen(self):
+        """Reopen budget"""
+        for budget in self:
+            if budget.state not in ('rejected', 'closed'):
+                raise UserError(_("Only rejected or closed budgets can be reopened!"))
+            
+            budget.state = 'draft'
+    
+    def get_budget_performance(self):
+        """Get budget performance analysis"""
+        performance = {
+            'total_budget': self.total_budget,
+            'total_actual': self.total_actual,
+            'total_variance': self.total_variance,
+            'variance_percentage': self.variance_percentage,
+            'lines': [],
+        }
+        
+        for line in self.budget_line_ids:
+            performance['lines'].append({
+                'account': line.account_id.complete_name,
+                'budget_amount': line.budget_amount,
+                'actual_amount': line.actual_amount,
+                'variance': line.variance,
+                'variance_percentage': line.variance_percentage,
+                'status': line.status,
+            })
+        
+        return performance
+
+class BudgetLine(models.Model):
+    _name = 'custom_accounting.budget.line'
+    _description = 'Budget Line'
+    _order = 'account_id'
+    
+    budget_id = fields.Many2one('custom_accounting.budget', string='Budget', 
+                               required=True, ondelete='cascade')
+    account_id = fields.Many2one('custom_accounting.account', string='Account', 
+                                required=True)
+    account_type = fields.Selection(related='account_id.account_type', 
+                                   string='Account Type', readonly=True)
+    
+    # Budget Amounts
+    budget_amount = fields.Float(string='Budget Amount', required=True, digits=(16, 2))
+    
+    # Actual Amounts (computed)
+    actual_amount = fields.Float(string='Actual Amount', compute='_compute_actual', 
+                                store=True, digits=(16, 2))
+    
+    # Variance
+    variance = fields.Float(string='Variance', compute='_compute_variance', 
+                           store=True, digits=(16, 2))
+    variance_percentage = fields.Float(string='Variance %', compute='_compute_variance', 
+                                      store=True, digits=(16, 2))
+    
+    # Status
+    status = fields.Selection([
+        ('on_budget', 'On Budget'),
+        ('under_budget', 'Under Budget'),
+        ('over_budget', 'Over Budget'),
+        ('no_activity', 'No Activity'),
+    ], string='Status', compute='_compute_status', store=True)
+    
+    # Monthly Breakdown
+    jan_amount = fields.Float(string='January', digits=(16, 2))
+    feb_amount = fields.Float(string='February', digits=(16, 2))
+    mar_amount = fields.Float(string='March', digits=(16, 2))
+    apr_amount = fields.Float(string='April', digits=(16, 2))
+    may_amount = fields.Float(string='May', digits=(16, 2))
+    jun_amount = fields.Float(string='June', digits=(16, 2))
+    jul_amount = fields.Float(string='July', digits=(16, 2))
+    aug_amount = fields.Float(string='August', digits=(16, 2))
+    sep_amount = fields.Float(string='September', digits=(16, 2))
+    oct_amount = fields.Float(string='October', digits=(16, 2))
+    nov_amount = fields.Float(string='November', digits=(16, 2))
+    dec_amount = fields.Float(string='December', digits=(16, 2))
+    
+    # Notes
+    notes = fields.Text(string='Line Notes')
+    
+    @api.depends('budget_id.date_from', 'budget_id.date_to', 'account_id')
+    def _compute_actual(self):
+        for line in self:
+            if not line.budget_id or not line.account_id:
+                line.actual_amount = 0
+                continue
+            
+            # Get actual spend from journal entries within budget period
+            domain = [
+                ('account_id', '=', line.account_id.id),
+                ('date', '>=', line.budget_id.date_from),
+                ('date', '<=', line.budget_id.date_to),
+                ('move_id.state', '=', 'posted'),
+                ('company_id', '=', line.budget_id.company_id.id),
+            ]
+            
+            move_lines = self.env['custom_accounting.move.line'].search(domain)
+            
+            if line.account_id.account_type in ('expense', 'asset'):
+                # For expense and asset accounts, debit increases, credit decreases
+                actual = sum(move_lines.mapped('debit')) - sum(move_lines.mapped('credit'))
+            else:
+                # For income, liability, equity accounts
+                actual = sum(move_lines.mapped('credit')) - sum(move_lines.mapped('debit'))
+            
+            line.actual_amount = abs(actual)
+    
+    @api.depends('budget_amount', 'actual_amount')
+    def _compute_variance(self):
+        for line in self:
+            line.variance = line.budget_amount - line.actual_amount
+            
+            if line.budget_amount != 0:
+                line.variance_percentage = (line.variance / line.budget_amount) * 100
+            else:
+                line.variance_percentage = 0
+    
+    @api.depends('variance', 'actual_amount')
+    def _compute_status(self):
+        for line in self:
+            if line.actual_amount == 0:
+                line.status = 'no_activity'
+            elif abs(line.variance_percentage) <= 5:  # Within 5% tolerance
+                line.status = 'on_budget'
+            elif line.variance > 0:
+                line.status = 'under_budget'
+            else:
+                line.status = 'over_budget'
+    
+    @api.onchange('account_id')
+    def _onchange_account_id(self):
+        if self.account_id:
+            self.account_type = self.account_id.account_type
+
+class CostCenter(models.Model):
+    _name = 'custom_accounting.cost.center'
+    _description = 'Cost Center'
+    
+    name = fields.Char(string='Cost Center Name', required=True)
+    code = fields.Char(string='Cost Center Code', required=True, size=10)
+    parent_id = fields.Many2one('custom_accounting.cost.center', string='Parent Cost Center')
+    child_ids = fields.One2many('custom_accounting.cost.center', 'parent_id', 
+                               string='Child Cost Centers')
+    
+    manager_id = fields.Many2one('res.users', string='Cost Center Manager')
+    department_id = fields.Many2one('hr.department', string='Department')
+    
+    active = fields.Boolean(string='Active', default=True)
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company)
+    
+    description = fields.Text(string='Description')
+    
+    _sql_constraints = [
+        ('code_company_uniq', 'unique(code, company_id)', 
+         'Cost center code must be unique per company!'),
+    ]

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Form View -->
+    <record id="view_asset_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.form</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <form string="Asset">
+                <header>
+                    <button name="action_start" type="object" string="Start"
+                            class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_close" type="object" string="Close"
+                            class="btn-secondary"
+                            invisible="state != 'running'"/>
+                    <button name="action_reset_to_draft" type="object" string="Reset to Draft"
+                            class="btn-light"
+                            invisible="state != 'closed'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,running,closed"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="acquisition_date"/>
+                            <field name="value"/>
+                            <field name="depreciation_rate"/>
+                            <field name="accumulated_depreciation" readonly="1"/>
+                            <field name="residual_value" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="account_id"/>
+                            <field name="journal_id"/>
+                            <field name="company_id" readonly="1"/>
+                            <field name="user_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Asset Tree View -->
+    <record id="view_asset_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.tree</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <tree string="Assets">
+                <field name="name"/>
+                <field name="acquisition_date"/>
+                <field name="value"/>
+                <field name="depreciation_rate"/>
+                <field name="accumulated_depreciation"/>
+                <field name="residual_value"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Asset Search View -->
+    <record id="view_asset_search" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.search</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <search string="Search Assets">
+                <field name="name"/>
+                <filter name="state_draft" string="Draft" domain="[('state','=','draft')]"/>
+                <filter name="state_running" string="Running" domain="[('state','=','running')]"/>
+                <filter name="state_closed" string="Closed" domain="[('state','=','closed')]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Menu and Action -->
+    <record id="action_custom_asset" model="ir.actions.act_window">
+        <field name="name">Assets</field>
+        <field name="res_model">custom_accounting.asset</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- MENU ITEM REMOVED - Now defined in menu.xml -->
+    <!-- This line was removed: <menuitem id="menu_custom_assets" name="Assets" parent="menu_custom_accounting_root" action="action_custom_asset" sequence="20"/> -->
+</odoo>

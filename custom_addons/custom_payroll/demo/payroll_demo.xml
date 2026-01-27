@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Demo data for payroll module -->
+    <record id="demo_employee_1" model="custom_payroll.employee">
+        <field name="name">John Adekunle</field>
+        <field name="payroll_number">EMP001</field>
+        <field name="employment_date">2024-01-15</field>
+        <field name="basic_salary">250000</field>
+        <field name="housing_allowance">50000</field>
+        <field name="transport_allowance">20000</field>
+        <field name="kra_pin">A123456789M</field>
+        <field name="nssf_number">NSF123456</field>
+        <field name="nhif_number">NHF789012</field>
+        <field name="payroll_active">True</field>
+    </record>
+    
+    <record id="demo_employee_2" model="custom_payroll.employee">
+        <field name="name">Chioma Nwosu</field>
+        <field name="payroll_number">EMP002</field>
+        <field name="employment_date">2024-03-10</field>
+        <field name="basic_salary">180000</field>
+        <field name="housing_allowance">30000</field>
+        <field name="transport_allowance">15000</field>
+        <field name="payroll_active">True</field>
+    </record>
+</odoo>

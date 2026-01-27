@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="coa_cash" model="custom_accounting.account">
+            <field name="name">Cash Account</field>
+            <field name="code">900001</field>
+            <field name="account_type">asset</field>
+            <field name="reconcile">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="coa_bank" model="custom_accounting.account">
+            <field name="name">Bank Account</field>
+            <field name="code">900002</field>
+            <field name="account_type">asset</field>
+            <field name="reconcile">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="coa_expense" model="custom_accounting.account">
+            <field name="name">General Expense</field>
+            <field name="code">900003</field>
+            <field name="account_type">expense</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+    </data>
+</odoo>

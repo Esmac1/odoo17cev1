@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Payroll Summary Report -->
+    <record id="report_payroll_summary" model="ir.actions.report">
+        <field name="name">Payroll Summary</field>
+        <field name="model">custom_payroll.payslip_run</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">custom_payroll.report_payroll_summary_template</field>
+        <field name="print_report_name">'Payroll Summary - %s' % (object.name)</field>
+        <field name="binding_model_id" ref="model_custom_payroll_payslip_run"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

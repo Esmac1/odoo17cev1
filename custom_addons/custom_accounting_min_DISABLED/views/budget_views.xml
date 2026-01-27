@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Budget Form View -->
+    <record id="view_budget_form" model="ir.ui.view">
+        <field name="name">custom_accounting.budget.form</field>
+        <field name="model">custom_accounting.budget</field>
+        <field name="arch" type="xml">
+            <form string="Budget">
+                <header>
+                    <button name="action_submit" type="object" string="Submit" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_approve" type="object" string="Approve" class="btn-success"
+                            invisible="state != 'submitted'"/>
+                    <button name="action_reject" type="object" string="Reject" class="btn-danger"
+                            invisible="state != 'submitted'"/>
+                    <button name="action_close" type="object" string="Close" class="btn-default"
+                            invisible="state != 'approved'"/>
+                    <button name="action_reopen" type="object" string="Re-open" class="btn-info"
+                            invisible="state not in ['rejected', 'closed']"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,approved,rejected,closed"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="fiscal_year"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                        </group>
+                        <group>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                    
+                    <field name="line_ids">
+                        <tree editable="bottom">
+                            <field name="account_id"/>
+                            <field name="account_code" readonly="1"/>
+                            <field name="account_name" readonly="1"/>
+                            <field name="budget_amount"/>
+                            <field name="actual_amount" readonly="1"/>
+                            <field name="variance_amount" readonly="1"/>
+                            <field name="status" readonly="1"/>
+                        </tree>
+                    </field>
+                    
+                    <group>
+                        <group>
+                            <field name="total_budget"/>
+                            <field name="total_actual"/>
+                            <field name="total_variance"/>
+                            <field name="variance_percentage"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Budget Tree View -->
+    <record id="view_budget_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.budget.tree</field>
+        <field name="model">custom_accounting.budget</field>
+        <field name="arch" type="xml">
+            <tree string="Budgets">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="fiscal_year"/>
+                <field name="total_budget"/>
+                <field name="total_actual"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Budget Action -->
+    <record id="action_custom_budget" model="ir.actions.act_window">
+        <field name="name">Budgets</field>
+        <field name="res_model">custom_accounting.budget</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

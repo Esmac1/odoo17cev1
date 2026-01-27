@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Recurring Transaction Tree View -->
+    <record id="view_recurring_transaction_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.tree</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <tree string="Recurring Transactions">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="amount"/>
+                <field name="interval_number"/>
+                <field name="interval_type"/>
+                <field name="next_date"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Recurring Transaction Form View -->
+    <record id="view_recurring_transaction_form" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.form</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <form string="Recurring Transaction">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="partner_id"/>
+                        <field name="amount"/>
+                        <field name="interval_number"/>
+                        <field name="interval_type"/>
+                        <field name="next_date"/>
+                        <field name="journal_id"/>
+                        <field name="account_id"/>
+                        <field name="active"/>
+                    </group>
+                    <footer>
+                        <button name="action_generate_entries" type="object" string="Generate Entries" class="btn-primary"/>
+                    </footer>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Recurring Transactions Menu & Action -->
+    <record id="action_custom_recurring" model="ir.actions.act_window">
+        <field name="name">Recurring Transactions</field>
+        <field name="res_model">custom_accounting.recurring</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

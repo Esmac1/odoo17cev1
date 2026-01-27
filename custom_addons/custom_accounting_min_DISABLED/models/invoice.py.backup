@@ -1,0 +1,472 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError, UserError
+from datetime import datetime, timedelta
+import json
+
+class CustomInvoice(models.Model):
+    _name = 'custom_accounting.invoice'
+    _description = 'Invoice Management (AR/AP)'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _order = 'invoice_date desc, name desc'
+    
+    @api.model
+    def _get_default_currency(self):
+        return self.env.company.currency_id
+    
+    # Basic Information
+    name = fields.Char(string='Invoice Number', readonly=True, default='/', copy=False)
+    invoice_date = fields.Date(string='Invoice Date', default=fields.Date.today, required=True)
+    due_date = fields.Date(string='Due Date', required=True, 
+                          default=lambda self: fields.Date.today() + timedelta(days=30))
+    
+    type = fields.Selection([
+        ('out_invoice', 'Customer Invoice'),
+        ('in_invoice', 'Vendor Bill'),
+        ('out_refund', 'Customer Credit Note'),
+        ('in_refund', 'Vendor Credit Note'),
+    ], string='Type', required=True, default='out_invoice')
+    
+    partner_id = fields.Many2one('res.partner', string='Customer/Vendor', required=True)
+    partner_email = fields.Char(string='Email', related='partner_id.email')
+    partner_phone = fields.Char(string='Phone', related='partner_id.phone')
+    
+    journal_id = fields.Many2one('custom_accounting.journal', string='Journal', required=True)
+    currency_id = fields.Many2one('res.currency', string='Currency', 
+                                 default=_get_default_currency, required=True)
+    
+    # Invoice Lines
+    invoice_line_ids = fields.One2many('custom_accounting.invoice.line', 'invoice_id', 
+                                       string='Invoice Lines')
+    
+    # Taxes
+    tax_ids = fields.Many2many('custom_accounting.tax', string='Taxes')
+    tax_group_ids = fields.Many2many('custom_accounting.tax.group', 
+                                     string='Tax Groups',
+                                     relation='custom_invoice_tax_group_rel')
+    
+    # Amounts
+    amount_untaxed = fields.Float(string='Untaxed Amount', compute='_compute_amounts', 
+                                 store=True, digits=(16, 2))
+    amount_tax = fields.Float(string='Tax Amount', compute='_compute_amounts', 
+                             store=True, digits=(16, 2))
+    amount_total = fields.Float(string='Total Amount', compute='_compute_amounts', 
+                               store=True, digits=(16, 2))
+    amount_due = fields.Float(string='Amount Due', compute='_compute_amounts', 
+                             store=True, digits=(16, 2))
+    amount_paid = fields.Float(string='Amount Paid', compute='_compute_amounts', 
+                              store=True, digits=(16, 2))
+    
+    # Accounting
+    move_id = fields.Many2one('custom_accounting.move', string='Journal Entry', 
+                             readonly=True, copy=False)
+    account_id = fields.Many2one('custom_accounting.account', string='Account', 
+                                compute='_compute_account', store=True)
+    
+    # Payment Information
+    payment_term_id = fields.Many2one('custom_accounting.payment.term', 
+                                     string='Payment Terms')
+    payment_ids = fields.One2many('custom_accounting.payment', 'invoice_id', 
+                                  string='Payments')
+    payment_state = fields.Selection([
+        ('not_paid', 'Not Paid'),
+        ('in_payment', 'In Payment'),
+        ('paid', 'Paid'),
+        ('partial', 'Partially Paid'),
+        ('overdue', 'Overdue'),
+    ], string='Payment Status', compute='_compute_payment_state', store=True)
+    
+    # State
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('paid', 'Paid'),
+        ('cancelled', 'Cancelled'),
+    ], string='Status', default='draft', tracking=True)
+    
+    # Nigeria Specific
+    tin = fields.Char(string='TIN', related='partner_id.vat', readonly=True)
+    wht_certificate_no = fields.Char(string='WHT Certificate Number')
+    vat_invoice_no = fields.Char(string='VAT Invoice Number')
+    tax_authority = fields.Selection([
+        ('firs', 'FIRS'),
+        ('lirs', 'LIRS'),
+        ('others', 'Other State'),
+    ], string='Tax Authority')
+    
+    # Advanced Fields
+    reference = fields.Char(string='Reference')
+    terms_conditions = fields.Html(string='Terms and Conditions')
+    notes = fields.Text(string='Internal Notes')
+    
+    # Dates
+    posted_date = fields.Datetime(string='Posted Date', readonly=True)
+    paid_date = fields.Datetime(string='Paid Date', readonly=True)
+    
+    # Company
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company, required=True)
+    
+    # Analytic
+    analytic_account_id = fields.Many2one('account.analytic.account', 
+                                         string='Analytic Account')
+    analytic_tag_ids = fields.Many2many('account.analytic.tag', 
+                                       string='Analytic Tags',
+                                       relation='custom_invoice_analytic_tag_rel')
+    
+    # === CALENDAR VIEW FIELDS (ADD THESE) ===
+    start_date = fields.Date(string='Start Date', compute='_compute_calendar_fields', store=True)
+    stop_date = fields.Date(string='Stop Date', compute='_compute_calendar_fields', store=True)
+    start_datetime = fields.Datetime(string='Start DateTime', compute='_compute_calendar_fields', store=True)
+    stop_datetime = fields.Datetime(string='Stop DateTime', compute='_compute_calendar_fields', store=True)
+    color = fields.Integer(string='Color Index', compute='_compute_color')
+    allday = fields.Boolean(string='All Day', default=True)
+    
+    _sql_constraints = [
+        ('name_company_uniq', 'unique(name, company_id)', 'Invoice number must be unique per company!'),
+    ]
+    
+    @api.depends('invoice_line_ids.subtotal', 'tax_ids', 'payment_ids.amount')
+    def _compute_amounts(self):
+        for invoice in self:
+            # Calculate untaxed amount
+            invoice.amount_untaxed = sum(invoice.invoice_line_ids.mapped('subtotal'))
+            
+            # Calculate tax amount
+            tax_amount = 0
+            for line in invoice.invoice_line_ids:
+                for tax in line.tax_ids:
+                    tax_amount += line.subtotal * (tax.rate / 100.0)
+            invoice.amount_tax = tax_amount
+            
+            # Calculate total
+            invoice.amount_total = invoice.amount_untaxed + invoice.amount_tax
+            
+            # Calculate payments
+            invoice.amount_paid = sum(invoice.payment_ids.filtered(
+                lambda p: p.state == 'posted').mapped('amount'))
+            invoice.amount_due = invoice.amount_total - invoice.amount_paid
+    
+    @api.depends('type', 'partner_id')
+    def _compute_account(self):
+        for invoice in self:
+            if invoice.type in ('out_invoice', 'out_refund'):
+                # Receivable account
+                invoice.account_id = invoice.partner_id.property_account_receivable_id or \
+                    self.env['custom_accounting.account'].search([
+                        ('account_type', '=', 'asset'),
+                        ('reconcile', '=', True),
+                        ('company_id', '=', invoice.company_id.id)
+                    ], limit=1)
+            else:
+                # Payable account
+                invoice.account_id = invoice.partner_id.property_account_payable_id or \
+                    self.env['custom_accounting.account'].search([
+                        ('account_type', '=', 'liability'),
+                        ('company_id', '=', invoice.company_id.id)
+                    ], limit=1)
+    
+    @api.depends('amount_due', 'due_date', 'state')
+    def _compute_payment_state(self):
+        today = fields.Date.today()
+        for invoice in self:
+            if invoice.state != 'posted':
+                invoice.payment_state = 'not_paid'
+            elif invoice.amount_due == 0:
+                invoice.payment_state = 'paid'
+            elif invoice.amount_paid > 0:
+                invoice.payment_state = 'partial'
+            elif invoice.due_date and invoice.due_date < today:
+                invoice.payment_state = 'overdue'
+            else:
+                invoice.payment_state = 'in_payment'
+    
+    # === CALENDAR FIELD COMPUTATIONS ===
+    @api.depends('invoice_date')
+    def _compute_calendar_fields(self):
+        for invoice in self:
+            invoice.start_date = invoice.invoice_date
+            invoice.stop_date = invoice.invoice_date
+            invoice.start_datetime = fields.Datetime.to_datetime(invoice.invoice_date) if invoice.invoice_date else False
+            invoice.stop_datetime = fields.Datetime.to_datetime(invoice.invoice_date) if invoice.invoice_date else False
+    
+    @api.depends('payment_state', 'type')
+    def _compute_color(self):
+        for invoice in self:
+            if invoice.payment_state == 'overdue':
+                invoice.color = 1  # Red
+            elif invoice.payment_state == 'paid':
+                invoice.color = 10  # Green
+            elif invoice.payment_state == 'partial':
+                invoice.color = 2  # Orange
+            elif invoice.type in ('out_invoice', 'out_refund'):
+                invoice.color = 4  # Blue for customer invoices
+            else:
+                invoice.color = 3  # Purple for vendor bills
+    
+    @api.model
+    def create(self, vals):
+        if vals.get('name', '/') == '/':
+            if vals.get('type', 'out_invoice') in ('out_invoice', 'out_refund'):
+                sequence_code = 'custom_accounting.invoice.customer'
+            else:
+                sequence_code = 'custom_accounting.invoice.vendor'
+            vals['name'] = self.env['ir.sequence'].next_by_code(sequence_code)
+        return super().create(vals)
+    
+    def action_post(self):
+        """Post invoice and create journal entry"""
+        for invoice in self:
+            if invoice.state != 'draft':
+                raise UserError(_("Only draft invoices can be posted!"))
+            
+            if not invoice.invoice_line_ids:
+                raise UserError(_("Please add at least one invoice line!"))
+            
+            # Create journal entry
+            move_lines = []
+            
+            # Account line (Receivable/Payable)
+            if invoice.type in ('out_invoice', 'out_refund'):
+                # Customer invoice/refund
+                move_lines.append((0, 0, {
+                    'name': f"Invoice {invoice.name} - {invoice.partner_id.name}",
+                    'account_id': invoice.account_id.id,
+                    'partner_id': invoice.partner_id.id,
+                    'debit': invoice.amount_total if invoice.type == 'out_invoice' else 0,
+                    'credit': invoice.amount_total if invoice.type == 'out_refund' else 0,
+                }))
+            else:
+                # Vendor bill/refund
+                move_lines.append((0, 0, {
+                    'name': f"Bill {invoice.name} - {invoice.partner_id.name}",
+                    'account_id': invoice.account_id.id,
+                    'partner_id': invoice.partner_id.id,
+                    'debit': invoice.amount_total if invoice.type == 'in_refund' else 0,
+                    'credit': invoice.amount_total if invoice.type == 'in_invoice' else 0,
+                }))
+            
+            # Invoice lines
+            for line in invoice.invoice_line_ids:
+                move_lines.append((0, 0, {
+                    'name': line.name,
+                    'account_id': line.account_id.id,
+                    'analytic_account_id': line.analytic_account_id.id,
+                    'analytic_tag_ids': [(6, 0, line.analytic_tag_ids.ids)] if line.analytic_tag_ids else False,
+                    'debit': line.subtotal if invoice.type in ('in_invoice', 'out_refund') else 0,
+                    'credit': line.subtotal if invoice.type in ('out_invoice', 'in_refund') else 0,
+                }))
+            
+            # Tax lines
+            for tax in invoice.tax_ids:
+                tax_amount = invoice.amount_untaxed * (tax.rate / 100.0)
+                move_lines.append((0, 0, {
+                    'name': f"Tax: {tax.name}",
+                    'account_id': tax.account_id.id,
+                    'debit': tax_amount if invoice.type in ('in_invoice', 'out_refund') else 0,
+                    'credit': tax_amount if invoice.type in ('out_invoice', 'in_refund') else 0,
+                }))
+            
+            move_vals = {
+                'date': invoice.invoice_date,
+                'journal_id': invoice.journal_id.id,
+                'ref': invoice.name,
+                'partner_id': invoice.partner_id.id,
+                'line_ids': move_lines,
+            }
+            
+            invoice.move_id = self.env['custom_accounting.move'].create(move_vals)
+            invoice.move_id.action_post()
+            invoice.state = 'posted'
+            invoice.posted_date = fields.Datetime.now()
+    
+    def action_cancel(self):
+        """Cancel invoice"""
+        for invoice in self:
+            if invoice.state not in ('draft', 'posted'):
+                raise UserError(_("Only draft or posted invoices can be cancelled!"))
+            
+            if invoice.move_id:
+                invoice.move_id.action_cancel()
+            
+            invoice.state = 'cancelled'
+    
+    def action_register_payment(self):
+        """Open payment wizard"""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Register Payment'),
+            'res_model': 'custom_accounting.payment',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_invoice_id': self.id,
+                'default_amount': self.amount_due,
+                'default_payment_type': 'inbound' if self.type.startswith('out') else 'outbound',
+                'default_currency_id': self.currency_id.id,
+                'default_journal_id': self.journal_id.id,
+            },
+        }
+    
+    def action_view_payments(self):
+        """View invoice payments"""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Payments'),
+            'res_model': 'custom_accounting.payment',
+            'view_mode': 'tree,form',
+            'domain': [('invoice_id', '=', self.id)],
+            'context': {'create': False},
+        }
+    
+    def action_print_invoice(self):
+        """Print invoice"""
+        self.ensure_one()
+        # You'll need to create a report later
+        return {
+            'type': 'ir.actions.act_url',
+            'url': f'/web#id={self.id}&model=custom_accounting.invoice&view_type=form',
+            'target': 'self',
+        }
+    
+    def _get_aged_amounts(self):
+        """Get aged amounts for receivable/payable aging"""
+        today = fields.Date.today()
+        age_days = (today - self.invoice_date).days
+        
+        if age_days <= 30:
+            bucket = 'current'
+        elif age_days <= 60:
+            bucket = '30_days'
+        elif age_days <= 90:
+            bucket = '60_days'
+        elif age_days <= 120:
+            bucket = '90_days'
+        else:
+            bucket = 'over_120'
+        
+        return {
+            'bucket': bucket,
+            'amount': self.amount_due,
+            'age_days': age_days,
+        }
+
+class InvoiceLine(models.Model):
+    _name = 'custom_accounting.invoice.line'
+    _description = 'Invoice Line'
+    _order = 'sequence, id'
+    
+    invoice_id = fields.Many2one('custom_accounting.invoice', string='Invoice', 
+                                required=True, ondelete='cascade')
+    sequence = fields.Integer(string='Sequence', default=10)
+    
+    product_id = fields.Many2one('product.product', string='Product')
+    name = fields.Char(string='Description', required=True)
+    account_id = fields.Many2one('custom_accounting.account', string='Account', required=True)
+    
+    quantity = fields.Float(string='Quantity', default=1.0, digits='Product Unit of Measure')
+    uom_id = fields.Many2one('uom.uom', string='Unit of Measure')
+    price_unit = fields.Float(string='Unit Price', required=True, digits='Product Price')
+    discount = fields.Float(string='Discount (%)', digits='Discount', default=0.0)
+    
+    tax_ids = fields.Many2many('custom_accounting.tax', 
+                              string='Taxes',
+                              relation='custom_invoice_line_tax_rel')
+    subtotal = fields.Float(string='Subtotal', compute='_compute_subtotal', 
+                           store=True, digits=(16, 2))
+    
+    # Analytic
+    analytic_account_id = fields.Many2one('account.analytic.account', 
+                                         string='Analytic Account')
+    analytic_tag_ids = fields.Many2many('account.analytic.tag', 
+                                       string='Analytic Tags',
+                                       relation='custom_invoice_line_analytic_tag_rel')
+    
+    @api.depends('quantity', 'price_unit', 'discount')
+    def _compute_subtotal(self):
+        for line in self:
+            price = line.price_unit * (1 - (line.discount or 0.0) / 100.0)
+            line.subtotal = line.quantity * price
+    
+    @api.onchange('product_id')
+    def _onchange_product_id(self):
+        if self.product_id:
+            self.name = self.product_id.name
+            self.account_id = self.product_id.property_account_income_id or \
+                self.product_id.categ_id.property_account_income_categ_id
+            self.price_unit = self.product_id.list_price
+            self.uom_id = self.product_id.uom_id
+    
+    def _prepare_tax_line(self):
+        """Prepare tax line for this invoice line"""
+        taxes = []
+        for tax in self.tax_ids:
+            tax_amount = self.subtotal * (tax.rate / 100.0)
+            taxes.append({
+                'tax_id': tax.id,
+                'tax_name': tax.name,
+                'tax_rate': tax.rate,
+                'tax_amount': tax_amount,
+                'account_id': tax.account_id.id,
+            })
+        return taxes
+
+class PaymentTerm(models.Model):
+    _name = 'custom_accounting.payment.term'
+    _description = 'Payment Terms'
+    
+    name = fields.Char(string='Payment Terms', required=True, translate=True)
+    code = fields.Char(string='Code', size=10)
+    active = fields.Boolean(string='Active', default=True)
+    
+    line_ids = fields.One2many('custom_accounting.payment.term.line', 
+                               'payment_term_id', string='Payment Terms Lines')
+    
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company)
+    note = fields.Text(string='Notes')
+    
+    def compute(self, amount, date_ref=False):
+        """Compute the payment terms"""
+        date_ref = date_ref or fields.Date.today()
+        result = []
+        for line in self.line_ids:
+            new_date = fields.Date.from_string(date_ref)
+            if line.option == 'day_after_invoice':
+                new_date += timedelta(days=line.days)
+            elif line.option == 'day_following_month':
+                new_date = new_date.replace(day=line.days)
+                if new_date <= date_ref:
+                    new_date = new_date + timedelta(days=31)
+                    new_date = new_date.replace(day=line.days)
+            elif line.option == 'day_current_month':
+                new_date = new_date.replace(day=line.days)
+            
+            result.append({
+                'date': new_date,
+                'amount': amount * (line.value / 100.0),
+                'days': line.days,
+                'option': line.option,
+            })
+        
+        return result
+
+class PaymentTermLine(models.Model):
+    _name = 'custom_accounting.payment.term.line'
+    _description = 'Payment Term Line'
+    
+    payment_term_id = fields.Many2one('custom_accounting.payment.term', 
+                                     string='Payment Terms', required=True)
+    value = fields.Float(string='Percentage', required=True, digits='Discount')
+    days = fields.Integer(string='Number of Days', required=True, default=0)
+    option = fields.Selection([
+        ('day_after_invoice', 'Days after invoice date'),
+        ('day_following_month', 'Day of the following month'),
+        ('day_current_month', 'Day of current month'),
+    ], string='Option', default='day_after_invoice', required=True)
+    
+    _sql_constraints = [
+        ('value_check', 'CHECK(value >= 0 AND value <= 100)', 'Percentage must be between 0 and 100!'),
+    ]

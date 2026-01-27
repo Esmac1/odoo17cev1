@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Sequence -->
+    <record id="seq_custom_accounting_asset" model="ir.sequence">
+        <field name="name">Asset Code</field>
+        <field name="code">custom_accounting.asset</field>
+        <field name="prefix">AST/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Reconciliation Sequence -->
+    <record id="seq_custom_accounting_reconciliation" model="ir.sequence">
+        <field name="name">Reconciliation Reference</field>
+        <field name="code">custom_accounting.reconciliation</field>
+        <field name="prefix">REC/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Budget Sequence -->
+    <record id="seq_custom_accounting_budget" model="ir.sequence">
+        <field name="name">Budget Code</field>
+        <field name="code">custom_accounting.budget</field>
+        <field name="prefix">BUD/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Customer Invoice Sequence -->
+    <record id="seq_custom_accounting_invoice_customer" model="ir.sequence">
+        <field name="name">Customer Invoice</field>
+        <field name="code">custom_accounting.invoice.customer</field>
+        <field name="prefix">INV/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Vendor Invoice Sequence -->
+    <record id="seq_custom_accounting_invoice_vendor" model="ir.sequence">
+        <field name="name">Vendor Bill</field>
+        <field name="code">custom_accounting.invoice.vendor</field>
+        <field name="prefix">BILL/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Bank Transaction Sequence -->
+    <record id="seq_custom_accounting_bank_transaction" model="ir.sequence">
+        <field name="name">Bank Transaction</field>
+        <field name="code">custom_accounting.bank_transaction</field>
+        <field name="prefix">BANK/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Payment Inbound Sequence -->
+    <record id="seq_custom_accounting_payment_in" model="ir.sequence">
+        <field name="name">Customer Payment</field>
+        <field name="code">custom_accounting.payment.in</field>
+        <field name="prefix">PAY-IN/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    
+    <!-- Payment Outbound Sequence -->
+    <record id="seq_custom_accounting_payment_out" model="ir.sequence">
+        <field name="name">Vendor Payment</field>
+        <field name="code">custom_accounting.payment.out</field>
+        <field name="prefix">PAY-OUT/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Salary Structure Tree View -->
+    <record id="view_salary_structure_tree" model="ir.ui.view">
+        <field name="name">custom_payroll.salary_structure.tree</field>
+        <field name="model">custom_payroll.salary_structure</field>
+        <field name="arch" type="xml">
+            <tree string="Salary Structures">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="default_basic"/>
+                <field name="default_housing"/>
+                <field name="default_transport"/>
+                <field name="active" widget="boolean"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Salary Structure Form View -->
+    <record id="view_salary_structure_form" model="ir.ui.view">
+        <field name="name">custom_payroll.salary_structure.form</field>
+        <field name="model">custom_payroll.salary_structure</field>
+        <field name="arch" type="xml">
+            <form string="Salary Structure">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Structure Name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="applies_to"/>
+                            <field name="department_id" attrs="{'invisible': [('applies_to','!=','department')]}"/>
+                            <field name="job_id" attrs="{'invisible': [('applies_to','!=','job')]}"/>
+                            <field name="grade_id" attrs="{'invisible': [('applies_to','!=','grade')]}"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Default Values">
+                            <field name="default_basic"/>
+                            <field name="default_housing"/>
+                            <field name="default_transport"/>
+                            <field name="default_medical"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Rules">
+                            <field name="rule_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="code"/>
+                                    <field name="rule_type"/>
+                                    <field name="amount_type"/>
+                                    <field name="amount"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Contracts">
+                            <field name="contract_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="employee_id"/>
+                                    <field name="date_start"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Salary Structure Search View -->
+    <record id="view_salary_structure_search" model="ir.ui.view">
+        <field name="name">custom_payroll.salary_structure.search</field>
+        <field name="model">custom_payroll.salary_structure</field>
+        <field name="arch" type="xml">
+            <search string="Search Salary Structures">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="active"/>
+                <filter string="Active" name="active" domain="[('active','=',True)]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Salary Structure Action -->
+    <record id="action_salary_structure" model="ir.actions.act_window">
+        <field name="name">Salary Structures</field>
+        <field name="res_model">custom_payroll.salary_structure</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_salary_structure_search"/>
+    </record>
+
+    <!-- Salary Structure Menu -->
+    <menuitem id="menu_salary_structure" name="Salary Structures" parent="menu_payroll_configuration" action="action_salary_structure" sequence="20"/>
+</odoo>

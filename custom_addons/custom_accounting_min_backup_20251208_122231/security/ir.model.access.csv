@@ -1,0 +1,10 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_custom_accounting_asset_user,custom_accounting.asset user,model_custom_accounting_asset,,1,1,1,1
+access_custom_accounting_bank_transaction_user,custom_accounting.bank_transaction user,model_custom_accounting_bank_transaction,,1,1,1,1
+access_custom_accounting_reconcile_user,custom_accounting.reconcile user,model_custom_accounting_reconcile,,1,1,1,1
+access_custom_accounting_recurring_user,custom_accounting.recurring user,model_custom_accounting_recurring,,1,1,1,1
+access_custom_accounting_move_user,custom_accounting.move user,model_custom_accounting_move,,1,1,1,1
+access_custom_accounting_move_line_user,custom_accounting.move.line user,model_custom_accounting_move_line,,1,1,1,1
+access_custom_accounting_account_user,custom_accounting.account user,model_custom_accounting_account,,1,1,1,1
+access_custom_accounting_journal_user,custom_accounting.journal user,model_custom_accounting_journal,,1,1,1,1
+access_custom_accounting_dashboard_user,custom_accounting.dashboard user,model_custom_accounting_dashboard,,1,1,1,1

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Assets Action -->
+    <record id="action_custom_asset" model="ir.actions.act_window">
+        <field name="name">Assets</field>
+        <field name="res_model">custom_accounting.asset</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Manage fixed assets and depreciation.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Assets Tree View -->
+    <record id="view_custom_accounting_asset_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.tree</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <tree string="Assets">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="category_id"/>
+                <field name="purchase_value"/>
+                <field name="current_value"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Assets Form View -->
+    <record id="view_custom_accounting_asset_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.form</field>
+        <field name="model">custom_accounting.asset</field>
+        <field name="arch" type="xml">
+            <form string="Asset">
+                <header>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="category_id"/>
+                        <field name="purchase_date"/>
+                        <field name="purchase_value"/>
+                        <field name="depreciation_method"/>
+                        <field name="useful_life"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>

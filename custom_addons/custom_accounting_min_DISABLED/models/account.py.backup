@@ -1,0 +1,61 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api
+
+class CustomAccount(models.Model):
+    _name = 'custom_accounting.account'
+    _description = 'Chart of Accounts'
+    _order = 'code'
+    _rec_name = 'complete_name'
+
+    name = fields.Char(string='Account Name', required=True)
+    code = fields.Char(string='Account Code', required=True)
+    complete_name = fields.Char(string='Complete Name', compute='_compute_complete_name', store=True)
+    account_type = fields.Selection([
+        ('asset', 'Asset'),
+        ('liability', 'Liability'),
+        ('equity', 'Equity'),
+        ('income', 'Income'),
+        ('expense', 'Expense'),
+    ], string='Type', required=True)
+
+    parent_id = fields.Many2one('custom_accounting.account', string='Parent Account')
+    child_ids = fields.One2many('custom_accounting.account', 'parent_id', string='Child Accounts')
+    currency_id = fields.Many2one('res.currency', string='Currency', default=lambda self: self.env.company.currency_id)
+
+    balance = fields.Float(string='Balance', compute='_compute_balance', store=True)
+    debit = fields.Float(string='Total Debit', compute='_compute_balance', store=True)
+    credit = fields.Float(string='Total Credit', compute='_compute_balance', store=True)
+
+    reconcile = fields.Boolean(string='Allow Reconciliation', default=False)
+    active = fields.Boolean(default=True)
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
+
+    @api.depends('name', 'code', 'parent_id.complete_name')
+    def _compute_complete_name(self):
+        for account in self:
+            if account.parent_id:
+                account.complete_name = f"{account.parent_id.complete_name} / {account.code} - {account.name}"
+            else:
+                account.complete_name = f"{account.code} - {account.name}"
+
+    @api.depends('child_ids.balance')
+    def _compute_balance(self):
+        for account in self:
+            if account.child_ids:
+                account.debit = sum(account.child_ids.mapped('debit'))
+                account.credit = sum(account.child_ids.mapped('credit'))
+                account.balance = sum(account.child_ids.mapped('balance'))
+            else:
+                # Use safe search to avoid circular import
+                move_line_model = self.env['custom_accounting.move.line']
+                lines = move_line_model.search([
+                    ('account_id', '=', account.id),
+                    ('move_id.state', '=', 'posted')
+                ])
+                account.debit = sum(lines.mapped('debit'))
+                account.credit = sum(lines.mapped('credit'))
+                account.balance = account.debit - account.credit
+
+    _sql_constraints = [
+        ('code_company_uniq', 'unique (code, company_id)', 'The code of the account must be unique per company!')
+    ]

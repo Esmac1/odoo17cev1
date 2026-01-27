@@ -1,0 +1,16 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_custom_payroll_employee,custom_payroll.employee,model_custom_payroll_employee,,1,1,1,1
+access_custom_payroll_contract,custom_payroll.contract,model_custom_payroll_contract,,1,1,1,1
+access_custom_payroll_salary_rule_category,custom_payroll.salary_rule_category,model_custom_payroll_salary_rule_category,,1,1,1,1
+access_custom_payroll_salary_rule,custom_payroll.salary_rule,model_custom_payroll_salary_rule,,1,1,1,1
+access_custom_payroll_salary_structure,custom_payroll.salary_structure,model_custom_payroll_salary_structure,,1,1,1,1
+access_custom_payroll_payslip,custom_payroll.payslip,model_custom_payroll_payslip,,1,1,1,1
+access_custom_payroll_payslip_line,custom_payroll.payslip_line,model_custom_payroll_payslip_line,,1,1,1,1
+access_custom_payroll_worked_days,custom_payroll.worked_days,model_custom_payroll_worked_days,,1,1,1,1
+access_custom_payroll_leave_days,custom_payroll.leave_days,model_custom_payroll_leave_days,,1,1,1,1
+access_custom_payroll_payslip_run,custom_payroll.payslip_run,model_custom_payroll_payslip_run,,1,1,1,1
+access_custom_payroll_loan,custom_payroll.loan,model_custom_payroll_loan,,1,1,1,1
+access_custom_payroll_loan_installment,custom_payroll.loan_installment,model_custom_payroll_loan_installment,,1,1,1,1
+access_custom_payroll_work_entry,custom_payroll.work_entry,model_custom_payroll_work_entry,,1,1,1,1
+access_custom_payroll_work_entry_type,custom_payroll.work.entry.type,model_custom_payroll_work_entry_type,,1,1,1,1
+access_custom_payroll_payroll_dashboard,custom_payroll.payroll_dashboard,model_custom_payroll_payroll_dashboard,,1,1,1,1

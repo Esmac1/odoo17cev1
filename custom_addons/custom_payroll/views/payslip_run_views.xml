@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Payslip Run Tree View -->
+    <record id="view_payslip_run_tree" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip_run.tree</field>
+        <field name="model">custom_payroll.payslip_run</field>
+        <field name="arch" type="xml">
+            <tree string="Payslip Batches">
+                <field name="name"/>
+                <field name="date_start"/>
+                <field name="date_end"/>
+                <field name="total_employees"/>
+                <field name="total_net"/>
+                <field name="state" widget="badge" decoration-success="state=='paid'" decoration-warning="state in ['verified','done']" decoration-danger="state=='cancelled'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Payslip Run Form View -->
+    <record id="view_payslip_run_form" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip_run.form</field>
+        <field name="model">custom_payroll.payslip_run</field>
+        <field name="arch" type="xml">
+            <form string="Payslip Batch">
+                <header>
+                    <button name="action_confirm" string="Confirm" type="object" class="btn-primary" states="draft"/>
+                    <button name="action_done" string="Mark as Done" type="object" states="verified"/>
+                    <button name="action_pay" string="Mark as Paid" type="object" states="done"/>
+                    <button name="action_cancel" string="Cancel" type="object" states="draft,verified"/>
+                    <button name="action_generate_payslips" string="Generate Payslips" type="object" class="oe_highlight" states="draft"/>
+                    <button name="action_print_summary" string="Print Summary" type="object" class="btn-secondary"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,verified,done,paid"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Batch Name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="date_start"/>
+                            <field name="date_end"/>
+                            <field name="date_payment"/>
+                            <field name="state"/>
+                        </group>
+                        <group string="Totals">
+                            <field name="total_employees" readonly="1"/>
+                            <field name="total_basic" readonly="1"/>
+                            <field name="total_gross" readonly="1"/>
+                            <field name="total_deductions" readonly="1"/>
+                            <field name="total_net" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Payslips">
+                            <field name="payslip_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="employee_id"/>
+                                    <field name="basic_salary"/>
+                                    <field name="gross_salary"/>
+                                    <field name="net_salary"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                                <form>
+                                    <field name="name"/>
+                                    <field name="employee_id"/>
+                                    <field name="date_from"/>
+                                    <field name="date_to"/>
+                                    <field name="gross_salary"/>
+                                    <field name="net_salary"/>
+                                    <field name="state"/>
+                                </form>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="notes" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Payslip Run Search View -->
+    <record id="view_payslip_run_search" model="ir.ui.view">
+        <field name="name">custom_payroll.payslip_run.search</field>
+        <field name="model">custom_payroll.payslip_run</field>
+        <field name="arch" type="xml">
+            <search string="Search Payslip Batches">
+                <field name="name"/>
+                <field name="state"/>
+                <field name="date_start"/>
+                <field name="date_end"/>
+                <filter string="This Month" name="this_month" domain="[('date_start','&gt;=',context_today().strftime('%Y-%m-01'))]"/>
+                <filter string="Unpaid" name="unpaid" domain="[('state','=','done')]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Month" name="group_month" context="{'group_by': 'date_start:month'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Payslip Run Action -->
+    <record id="action_payslip_run" model="ir.actions.act_window">
+        <field name="name">Payslip Batches</field>
+        <field name="res_model">custom_payroll.payslip_run</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_payslip_run_search"/>
+        <field name="context">{'default_state': 'draft'}</field>
+    </record>
+
+    <!-- Payslip Run Menu -->
+    <menuitem id="menu_payslip_run" name="Payslip Batches" parent="menu_payroll_root" action="action_payslip_run" sequence="45"/>
+</odoo>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Main Payroll Menu -->
+    <menuitem id="menu_payroll_root" name="Payroll" sequence="30"/>
+    
+    <!-- Configuration Submenu -->
+    <menuitem id="menu_payroll_configuration" name="Configuration" parent="menu_payroll_root" sequence="100"/>
+    
+    <!-- Already defined in other view files (they will be placed here automatically):
+        menu_payroll_dashboard (sequence=1)
+        menu_employee (sequence=10)
+        menu_contract (sequence=30)
+        menu_payslip (sequence=40)
+        menu_payslip_run (sequence=45)
+        menu_loan (sequence=50)
+        menu_work_entry (sequence=60)
+        menu_salary_rule (sequence=10 in configuration)
+        menu_salary_structure (sequence=20 in configuration)
+    -->
+    
+    <!-- Report Menu -->
+    <menuitem id="menu_payroll_reports" name="Reports" parent="menu_payroll_root" sequence="200"/>
+    
+    <!-- Report Actions -->
+    <menuitem id="menu_report_payslip" name="Payslip Report" parent="menu_payroll_reports" action="report_payslip" sequence="10"/>
+    <menuitem id="menu_report_payroll_summary" name="Payroll Summary" parent="menu_payroll_reports" action="report_payroll_summary" sequence="20"/>
+</odoo>

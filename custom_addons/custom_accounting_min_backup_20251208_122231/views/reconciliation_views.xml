@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="view_reconciliation_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.reconcile.tree</field>
+        <field name="model">custom_accounting.reconcile</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="account_id"/>
+                <field name="balance_system"/>
+                <field name="balance_bank"/>
+                <field name="difference"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_reconciliation_form" model="ir.ui.view">
+        <field name="name">custom_accounting.reconcile.form</field>
+        <field name="model">custom_accounting.reconcile</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="account_id"/>
+                        <field name="balance_system"/>
+                        <field name="balance_bank"/>
+                        <field name="difference" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Bank Transactions">
+                            <field name="transaction_ids" widget="many2many_tags"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_custom_reconcile" model="ir.actions.act_window">
+        <field name="name">Reconciliations</field>
+        <field name="res_model">custom_accounting.reconcile</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

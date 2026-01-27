@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Trial Balance Action (Report) -->
+    <record id="action_custom_trial_balance" model="ir.actions.act_window">
+        <field name="name">Trial Balance</field>
+        <field name="res_model">custom_accounting.trial.balance.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="type">ir.actions.act_window</field>
+    </record>
+    
+    <!-- Trial Balance Wizard Form -->
+    <record id="view_custom_trial_balance_wizard_form" model="ir.ui.view">
+        <field name="name">trial.balance.wizard.form</field>
+        <field name="model">custom_accounting.trial.balance.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Trial Balance Report">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                    <field name="target_move" widget="radio"/>
+                </group>
+                <footer>
+                    <button name="print_report" string="Print" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

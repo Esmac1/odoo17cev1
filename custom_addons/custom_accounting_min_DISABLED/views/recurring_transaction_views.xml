@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Recurring Transactions Action -->
+    <record id="action_custom_recurring" model="ir.actions.act_window">
+        <field name="name">Recurring Transactions</field>
+        <field name="res_model">custom_accounting.recurring</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create recurring transaction templates for automated journal entries.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Recurring Tree View -->
+    <record id="view_custom_accounting_recurring_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.tree</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <tree string="Recurring Transactions">
+                <field name="name"/>
+                <field name="journal_id"/>
+                <field name="interval_number"/>
+                <field name="interval_type"/>
+                <field name="next_date"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+    
+    <!-- Recurring Form View -->
+    <record id="view_custom_accounting_recurring_form" model="ir.ui.view">
+        <field name="name">custom_accounting.recurring.form</field>
+        <field name="model">custom_accounting.recurring</field>
+        <field name="arch" type="xml">
+            <form string="Recurring Transaction">
+                <header>
+                    <button name="action_generate_entries" type="object" string="Generate Entries" class="btn-primary"/>
+                    <field name="active" widget="boolean_button" options='{"terminology": "archive"}'/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="journal_id"/>
+                        <field name="interval_number"/>
+                        <field name="interval_type"/>
+                        <field name="next_date"/>
+                    </group>
+                    <notebook>
+                        <page string="Lines">
+                            <field name="line_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="account_id"/>
+                                    <field name="debit"/>
+                                    <field name="credit"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>

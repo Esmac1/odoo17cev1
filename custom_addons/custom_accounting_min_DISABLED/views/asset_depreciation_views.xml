@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Depreciation Line Views -->
+    <record id="view_custom_accounting_asset_depreciation_line_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.depreciation.line.tree</field>
+        <field name="model">custom_accounting.asset.depreciation.line</field>
+        <field name="arch" type="xml">
+            <tree string="Depreciation Lines">
+                <field name="date"/>
+                <field name="name"/>
+                <field name="amount"/>
+                <field name="state"/>
+                <field name="move_id" widget="many2one"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_custom_accounting_asset_depreciation_line_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.depreciation.line.form</field>
+        <field name="model">custom_accounting.asset.depreciation.line</field>
+        <field name="arch" type="xml">
+            <form string="Depreciation Line">
+                <sheet>
+                    <group>
+                        <field name="asset_id" readonly="1"/>
+                        <field name="date"/>
+                        <field name="name"/>
+                        <field name="amount"/>
+                        <field name="state"/>
+                    </group>
+                    <group>
+                        <field name="move_id" readonly="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_post" string="Post Depreciation" type="object" 
+                            class="btn-primary" />
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Depreciation Lines Action (from Asset form) -->
+    <record id="action_custom_asset_depreciation_line" model="ir.actions.act_window">
+        <field name="name">Depreciation Lines</field>
+        <field name="res_model">custom_accounting.asset.depreciation.line</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[]</field>
+        <field name="context">{'default_asset_id': active_id}</field>
+    </record>
+</odoo>

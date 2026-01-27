@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Payroll Dashboard View -->
+    <record id="view_payroll_dashboard" model="ir.ui.view">
+        <field name="name">custom_payroll.payroll_dashboard</field>
+        <field name="model">custom_payroll.payroll_dashboard</field>
+        <field name="arch" type="xml">
+            <form string="Payroll Dashboard">
+                <sheet>
+                    <div class="oe_chatter">
+                        <div class="o_dashboard_header">
+                            <h1>Payroll Dashboard</h1>
+                        </div>
+                        
+                        <!-- Summary Cards -->
+                        <div class="row mt16">
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Total Employees</h5>
+                                        <h2 class="card-text" t-esc="sum(record.total_employees for record in records)"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Total Payslips</h5>
+                                        <h2 class="card-text" t-esc="sum(record.total_payslips for record in records)"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Total Net Salary</h5>
+                                        <h2 class="card-text" t-esc="'₦{:,.2f}'.format(sum(record.total_net for record in records))"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Average Salary</h5>
+                                        <h2 class="card-text" t-esc="'₦{:,.2f}'.format(avg(record.avg_salary for record in records) if records else 0)"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Monthly Summary Table -->
+                        <div class="row mt16">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">Monthly Payroll Summary</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>Month</th>
+                                                    <th>Employees</th>
+                                                    <th>Payslips</th>
+                                                    <th>Total Basic</th>
+                                                    <th>Total Gross</th>
+                                                    <th>Total Deductions</th>
+                                                    <th>Total Net</th>
+                                                    <th>Average Salary</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr t-foreach="records" t-as="record">
+                                                    <td t-esc="record.month"/>
+                                                    <td t-esc="record.total_employees"/>
+                                                    <td t-esc="record.total_payslips"/>
+                                                    <td t-esc="'₦{:,.2f}'.format(record.total_basic)"/>
+                                                    <td t-esc="'₦{:,.2f}'.format(record.total_gross)"/>
+                                                    <td t-esc="'₦{:,.2f}'.format(record.total_deductions)"/>
+                                                    <td t-esc="'₦{:,.2f}'.format(record.total_net)"/>
+                                                    <td t-esc="'₦{:,.2f}'.format(record.avg_salary)"/>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Actions -->
+                        <div class="row mt16">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">Quick Actions</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <a href="#" class="btn btn-primary btn-block" data-action="action_payslip_run" data-model="custom_payroll.payslip_run">
+                                                    Create Payslip Batch
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <a href="#" class="btn btn-secondary btn-block" data-action="action_employee" data-model="custom_payroll.employee">
+                                                    Add Employee
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <a href="#" class="btn btn-success btn-block" data-action="action_loan" data-model="custom_payroll.loan">
+                                                    Process Loan
+                                                </a>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <a href="#" class="btn btn-info btn-block" data-action="action_contract" data-model="custom_payroll.contract">
+                                                    New Contract
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Payroll Dashboard Action -->
+    <record id="action_payroll_dashboard" model="ir.actions.act_window">
+        <field name="name">Payroll Dashboard</field>
+        <field name="res_model">custom_payroll.payroll_dashboard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_payroll_dashboard"/>
+        <field name="target">current</field>
+    </record>
+
+    <!-- Payroll Dashboard Menu -->
+    <menuitem id="menu_payroll_dashboard" name="Dashboard" parent="menu_payroll_root" action="action_payroll_dashboard" sequence="1"/>
+</odoo>

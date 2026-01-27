@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Asset Category Views -->
+    <record id="view_custom_accounting_asset_category_tree" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.category.tree</field>
+        <field name="model">custom_accounting.asset.category</field>
+        <field name="arch" type="xml">
+            <tree string="Asset Categories">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="description"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_custom_accounting_asset_category_form" model="ir.ui.view">
+        <field name="name">custom_accounting.asset.category.form</field>
+        <field name="model">custom_accounting.asset.category</field>
+        <field name="arch" type="xml">
+            <form string="Asset Category">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="name"/>
+                        </group>
+                        <group>
+                            <field name="description"/>
+                        </group>
+                    </group>
+                    <group string="Default Accounts">
+                        <field name="default_asset_account_id"/>
+                        <field name="default_depreciation_account_id"/>
+                        <field name="default_expense_account_id"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Asset Category Action -->
+    <record id="action_custom_asset_category" model="ir.actions.act_window">
+        <field name="name">Asset Categories</field>
+        <field name="res_model">custom_accounting.asset.category</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create asset categories to organize your fixed assets.
+            </p>
+        </field>
+    </record>
+
+    <!-- Asset Category Menu Item -->
+    <menuitem id="menu_custom_asset_category"
+              name="Asset Categories"
+              parent="menu_accounting_transactions"
+              action="action_custom_asset_category"
+              sequence="85"/>
+</odoo>

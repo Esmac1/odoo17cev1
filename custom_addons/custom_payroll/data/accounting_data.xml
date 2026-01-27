@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Main Payroll Accounts -->
+        
+        <!-- Salary Expense Accounts -->
+        <record id="account_salary_expense" model="custom_accounting.account">
+            <field name="name">Salary Expense</field>
+            <field name="code">900101</field>
+            <field name="account_type">expense</field>
+            <field name="account_category">payroll_expense</field>
+            <field name="payroll_account_type">salary_expense</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_overtime_expense" model="custom_accounting.account">
+            <field name="name">Overtime Expense</field>
+            <field name="code">900121</field>
+            <field name="account_type">expense</field>
+            <field name="account_category">payroll_expense</field>
+            <field name="payroll_account_type">overtime_expense</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_bonus_expense" model="custom_accounting.account">
+            <field name="name">Bonus Expense</field>
+            <field name="code">900131</field>
+            <field name="account_type">expense</field>
+            <field name="account_category">payroll_expense</field>
+            <field name="payroll_account_type">bonus_expense</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <!-- Allowance Accounts -->
+        <record id="account_transport_expense" model="custom_accounting.account">
+            <field name="name">Transport Allowance</field>
+            <field name="code">900161</field>
+            <field name="account_type">expense</field>
+            <field name="account_category">payroll_expense</field>
+            <field name="payroll_account_type">transport_expense</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_housing_expense" model="custom_accounting.account">
+            <field name="name">Housing Allowance</field>
+            <field name="code">900171</field>
+            <field name="account_type">expense</field>
+            <field name="account_category">payroll_expense</field>
+            <field name="payroll_account_type">housing_expense</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <!-- Payable Accounts -->
+        <record id="account_salary_payable" model="custom_accounting.account">
+            <field name="name">Salaries Payable</field>
+            <field name="code">900201</field>
+            <field name="account_type">liability</field>
+            <field name="account_category">payroll_liability</field>
+            <field name="payroll_account_type">salary_payable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_tax_payable" model="custom_accounting.account">
+            <field name="name">PAYE Tax Payable</field>
+            <field name="code">900301</field>
+            <field name="account_type">liability</field>
+            <field name="account_category">tax</field>
+            <field name="payroll_account_type">tax_payable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_pension_payable" model="custom_accounting.account">
+            <field name="name">Pension Payable</field>
+            <field name="code">900211</field>
+            <field name="account_type">liability</field>
+            <field name="account_category">payroll_liability</field>
+            <field name="payroll_account_type">pension_payable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_nhif_payable" model="custom_accounting.account">
+            <field name="name">NHIF Payable</field>
+            <field name="code">900221</field>
+            <field name="account_type">liability</field>
+            <field name="account_category">payroll_liability</field>
+            <field name="payroll_account_type">nhif_payable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <record id="account_nssf_payable" model="custom_accounting.account">
+            <field name="name">NSSF Payable</field>
+            <field name="code">900231</field>
+            <field name="account_type">liability</field>
+            <field name="account_category">payroll_liability</field>
+            <field name="payroll_account_type">nssf_payable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <!-- Loan Accounts -->
+        <record id="account_loan_receivable" model="custom_accounting.account">
+            <field name="name">Employee Loan Receivable</field>
+            <field name="code">900401</field>
+            <field name="account_type">asset</field>
+            <field name="account_category">current_asset</field>
+            <field name="payroll_account_type">loan_receivable</field>
+            <field name="is_payroll_account">True</field>
+            <field name="created_from_payroll">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+
+        <!-- Bank Account for Salary Payments -->
+        <record id="account_main_bank" model="custom_accounting.account">
+            <field name="name">Main Bank Account</field>
+            <field name="code">900001</field>
+            <field name="account_type">asset</field>
+            <field name="account_category">cash_bank</field>
+            <field name="reconcile">True</field>
+            <field name="company_id" ref="base.main_company"/>
+        </record>
+    </data>
+</odoo>
