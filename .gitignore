@@ -1,0 +1,15 @@
+# Odoo backups and tar.gz
+*.tar.gz
+*.sql
+
+# Filestore backups
+filestore_backup*/
+filestore_working*/
+
+# Temporary / backup files
+*.bak
+*.backup
+
+# Odoo filestore
+filestore/
+odoo-data/
