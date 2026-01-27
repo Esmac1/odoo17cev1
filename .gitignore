@@ -13,3 +13,9 @@ filestore_working*/
 # Odoo filestore
 filestore/
 odoo-data/
+*.tar.gz
+*.sql
+*.bak
+*.backup
+filestore*/
+odoo-data/
