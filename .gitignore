@@ -20,3 +20,12 @@ odoo-data/
 filestore*/
 odoo-data/
 docker-compose.yml.backup
+# Odoo backups, data, filestores - NEVER commit these!
+*.tar.gz
+*.sql
+filestore*
+odoo-data/
+backup*
+*_backup*
+*.bak
+*.backup
