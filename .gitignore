@@ -19,3 +19,4 @@ odoo-data/
 *.backup
 filestore*/
 odoo-data/
+docker-compose.yml.backup
